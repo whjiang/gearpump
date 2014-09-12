@@ -21,15 +21,21 @@ package org.apache.gearpump.cluster.main
 case class CLIOption[+T] (description:String = "", required: Boolean = false, defaultValue: Option[T] = None)
 
 class ParseResult(optionMap : Map[String, String], remainArguments : Array[String]) {
-  def getInt(key : String) = optionMap.get(key).get.toInt
+  def getInt(key : String) = get(key).toInt
 
-  def getString (key : String) = optionMap.get(key).get
+  def getLong(key : String) = get(key).toLong
 
-  def getBoolean (key : String) = optionMap.get(key).get.toBoolean
+  def getString (key : String) = get(key)
+
+  def getBoolean (key : String) = get(key).toBoolean
 
   def exists(key : String) = optionMap.get(key).isDefined
 
   def remainArgs = this.remainArguments
+
+  private def get(key : String) = {
+   optionMap.get(key).orElse(throw new Exception(s"key '$key' can't be found.")).get
+  }
 }
 
 /**

@@ -59,11 +59,11 @@ class AppMaster (config : Configs) extends ApplicationMaster {
 
   import context.dispatcher
 
-  private val appId = config.appId
-
   private val username = config.username
 
   private val LOG: Logger = LogUtil.getLogger(getClass, app = appId)
+
+  protected val appId = config.appId
 
   private val appDescription = config.appDescription.asInstanceOf[AppDescription]
   private val appJar = config.appjar

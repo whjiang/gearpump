@@ -140,14 +140,14 @@ object Build extends sbt.Build {
                            "master" -> Seq("-DlogFilename=master"),
                            "worker" -> Seq("-DlogFilename=worker")
                         ),
-        packExclude := Seq(fsio.id, examples_kafka.id, sol.id, wordcount.id, examples.id),
+        packExclude := Seq(fsio.id, examples_kafka.id, sol.id, wordcount.id, pagerank.id, examples.id),
         packResourceDir += (baseDirectory.value / "conf" -> "conf"),
         packResourceDir += (baseDirectory.value / "examples" / "target" / scalaVersionMajor -> "examples"),
         packExpandedClasspath := false,
         packExtraClasspath := new DefaultValueMap(Seq("${PROG_HOME}/conf"))
       )
   ).dependsOn(core, streaming, rest, external_kafka).aggregate(core, streaming, fsio, examples_kafka,
-      sol, wordcount, rest, external_kafka, examples)
+      sol, wordcount, pagerank, rest, external_kafka, examples)
 
   lazy val core = Project(
     id = "gearpump-core",
@@ -207,11 +207,17 @@ object Build extends sbt.Build {
     settings = commonSettings
   ) dependsOn (streaming % "provided")
 
+  lazy val pagerank = Project(
+    id = "gearpump-experiments-pagerank",
+    base = file("experiments/pagerank"),
+    settings = commonSettings
+  ) dependsOn streaming
+
   lazy val examples = Project(
     id = "gearpump-examples",
     base = file("examples"),
     settings = commonSettings ++ myAssemblySettings
-  ) dependsOn (wordcount, sol, fsio, examples_kafka)
+  ) dependsOn (wordcount, sol, fsio, examples_kafka, pagerank)
   
   lazy val rest = Project(
     id = "gearpump-rest",

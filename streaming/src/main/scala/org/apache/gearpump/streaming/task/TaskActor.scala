@@ -46,11 +46,11 @@ abstract class TaskActor(conf : Configs) extends Actor with ExpressTransport wit
   private val appMaster : ActorRef = conf.appMaster
 
   private val queue : util.ArrayDeque[Any] = new util.ArrayDeque[Any](INITIAL_WINDOW_SIZE)
-  private var partitioner : MergedPartitioner = null
+  protected var partitioner : MergedPartitioner = null
 
-  private var outputTaskIds : Array[TaskId] = null
-  private var flowControl : FlowControl = null
-  private var clockTracker : ClockTracker = null
+  protected var outputTaskIds : Array[TaskId] = null
+  protected var flowControl : FlowControl = null
+  protected var clockTracker : ClockTracker = null
 
   private var unackedClockSyncTimestamp : TimeStamp = 0
   private var needSyncToClockService = false
@@ -73,21 +73,21 @@ abstract class TaskActor(conf : Configs) extends Actor with ExpressTransport wit
 
   def onStop() : Unit = {}
 
-  def output(msg : Message) : Unit = {
+  /** output message to selected nodes */
+  def output(msg : Message, targets: Array[Int]) : Unit = {
     if (null == outputTaskIds || outputTaskIds.length == 0) {
       return
     }
 
-    val partitions = partitioner.getPartitions(msg)
-
     var start = 0
 
-    throughput.mark(partitions.length)
+    throughput.mark(targets.length)
 
-    while (start < partitions.length) {
-      val partition = partitions(start)
+    while (start < targets.length) {
+      val partition = targets(start)
 
       transport(msg, outputTaskIds(partition))
+      LOG.info(s"$taskId output message $msg to "+outputTaskIds(partition))
       val ackRequest = flowControl.sendMessage(partition)
       if (null != ackRequest) {
         transport(ackRequest, outputTaskIds(partition))
@@ -95,6 +95,17 @@ abstract class TaskActor(conf : Configs) extends Actor with ExpressTransport wit
 
       start = start + 1
     }
+  }
+
+  /** output message, the child(s) is decided by partitioner */
+  def output(msg: Message) : Unit = {
+    val partitions = partitioner.getPartitions(msg)
+    output(msg, partitions)
+  }
+
+  def output2AllEdges(msg: Message): Unit = {
+    val nodes : Array[Int] = (0 until outputTaskIds.length).toArray
+    output(msg, nodes)
   }
 
   final override def postStop() : Unit = {
@@ -266,7 +277,6 @@ object TaskActor {
 
   val INITIAL_WINDOW_SIZE = 1024 * 16
   val CLOCK_SYNC_TIMEOUT_INTERVAL = 3 * 1000 //3 seconds
-
   class MergedPartitioner(partitioners : Array[Partitioner], partitionStart : Array[Int], partitionStop : Array[Int]) {
 
     def length = partitioners.length
