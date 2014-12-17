@@ -125,6 +125,9 @@ object Build extends sbt.Build {
         packExclude := Seq(fsio.id, kafka.id, sol.id, wordcount.id),
         packResourceDir := Map(baseDirectory.value / "conf" -> "conf"),
         packExpandedClasspath := true,
+        packJvmOpts := Map("local"->Seq("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005"),
+                           "master" -> Seq("-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=5005")
+                          ),
         packExtraClasspath := new DefaultValueMap(Seq("${PROG_HOME}/conf"))
       )
   ).dependsOn(core, streaming).aggregate(core, streaming, fsio, kafka, sol, wordcount, rest)
