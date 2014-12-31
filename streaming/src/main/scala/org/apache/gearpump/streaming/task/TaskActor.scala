@@ -202,7 +202,7 @@ abstract class TaskActor(conf : Configs) extends Actor with ExpressTransport wit
     }
   }
 
-  private def sendFirstAckRequests() : Unit = {
+  protected def sendFirstAckRequests() : Unit = {
     for(i <- 0 until outputTaskIds.length) {
       val firstAckRequest = AckRequest(taskId, Seq(i, 0), sessionId)
       transport(firstAckRequest, outputTaskIds(i))

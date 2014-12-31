@@ -76,6 +76,7 @@ class PageNode(conf : Configs) extends TaskActor(conf) {
           outputTaskIds = nodes
           flowControl = new FlowControl(taskId, outputTaskIds.length, sessionId)
           clockTracker = new ClockTracker(flowControl)
+          sendFirstAckRequests()
           initialized.set(true)
 
           self ! Message(EdgeMessage(Double.MaxValue, nodeId))
