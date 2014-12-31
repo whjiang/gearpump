@@ -51,4 +51,5 @@ object PageRank extends App with ArgumentsParser{
   val context = ClientContext(config.getString("master"))
   val appId = context.submit(application(config))
   LOG.info(s"Page rank application submitted as application ${appId}...")
+  context.cleanup
 }
