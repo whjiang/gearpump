@@ -24,7 +24,7 @@ object Gear extends App {
 
   private val LOG: Logger = LogUtil.getLogger(getClass)
 
-  def usage(commandOption: Option[String]) = {
+  def usage(commandOption: Option[String]): Unit = {
     commandOption match {
       case Some(command) =>
         command match {
@@ -42,11 +42,13 @@ object Gear extends App {
             throw new Exception("Unknown command " + x)
         }
       case None =>
+        //scalastyle:off regex
         Console.println("Usage: app|info|kill|shell|replay ...")
+        //scalastyle:on regex
     }
   }
 
-  def executeCommand(command : String, commandArgs : Array[String]) = {
+  def executeCommand(command : String, commandArgs : Array[String]): Unit = {
 
     command match {
       case "kill" =>
@@ -64,7 +66,7 @@ object Gear extends App {
     }
   }
 
-  def start = {
+  def start: Unit = {
     args.length match {
       case 0 =>
         usage(None)

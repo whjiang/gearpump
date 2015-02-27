@@ -20,6 +20,7 @@ package org.apache.gearpump.cluster.main
 
 import java.util.concurrent.TimeUnit
 
+import akka.actor.Actor.emptyBehavior
 import akka.actor._
 import akka.cluster.ClusterEvent._
 import akka.cluster.{Cluster, Member, MemberStatus}
@@ -43,18 +44,18 @@ object Master extends App with ArgumentsParser {
     LogUtil.getLogger(getClass)
   }
 
-  val options: Array[(String, CLIOption[Any])] = 
+  val options: Array[(String, CLIOption[Any])] =
     Array("ip"->CLIOption[String]("<master ip address>",required = true),
       "port"->CLIOption("<master port>",required = true))
 
 
   val config = parse(args)
 
-  def start() = {
+  def start(): Unit = {
     master(config.getString("ip"), config.getInt("port"))
   }
 
-  def verifyMaster(master : String, port: Int, masters : Iterable[String])  = {
+  def verifyMaster(master : String, port: Int, masters : Iterable[String]): Boolean  = {
     masters.exists{ hostPort =>
       hostPort == s"$master:$port"
     }
@@ -97,7 +98,14 @@ object Master extends App with ArgumentsParser {
 
     LOG.info(s"master proxy is started at ${masterProxy.path}")
 
-    val mainThread = Thread.currentThread();
+    val mainThread = Thread.currentThread()
+
+    addShutdownHook(system, masterProxy, singletonManager, mainThread)
+
+    system.awaitTermination()
+  }
+
+  private def addShutdownHook(system: ActorSystem, masterProxy: ActorRef, singletonManager: ActorRef, mainThread: Thread): Unit = {
     Runtime.getRuntime().addShutdownHook(new Thread() {
       override def run() : Unit = {
         if (!system.isTerminated) {
@@ -113,12 +121,10 @@ object Master extends App with ArgumentsParser {
             case ex : Exception => //ignore
           }
           system.shutdown()
-          mainThread.join();
+          mainThread.join()
         }
       }
-    });
-
-    system.awaitTermination()
+    })
   }
 
   start()
@@ -139,7 +145,7 @@ class MasterWatcher(role: String, masterProxy : ActorRef) extends Actor  with Ac
   val ageOrdering = Ordering.fromLessThan[Member] { (a, b) => a.isOlderThan(b) }
   var membersByAge: immutable.SortedSet[Member] = immutable.SortedSet.empty(ageOrdering)
 
-  def receive : Receive = null
+  def receive : Receive = emptyBehavior
 
   // subscribe to MemberEvent, re-subscribe when restart
   override def preStart(): Unit = {
@@ -206,4 +212,3 @@ class MasterWatcher(role: String, masterProxy : ActorRef) extends Actor  with Ac
 object MasterWatcher {
   object Shutdown
 }
-

@@ -37,43 +37,46 @@ object AppSubmitter extends App with ArgumentsParser {
 
   def start : Unit = {
 
-    val config = parse(args)
-    if (null == config) {
-      return
-    }
+    val configOption = Option(parse(args))
+    if (configOption.isEmpty) {
+      LOG.info("Can't find configuration file.")
+    }else {
+      val config = configOption.get
+      val jar = config.getString("jar")
 
-    val jar = config.getString("jar")
+      // Set jar path to be submitted to cluster
+      System.setProperty(Constants.GEARPUMP_APP_JAR, jar)
 
-    // Set jar path to be submitted to cluster
-    System.setProperty(Constants.GEARPUMP_APP_JAR, jar)
-
-    val namePrefix = config.getString("namePrefix")
-    if (namePrefix.nonEmpty) {
-      if (!Util.validApplicationName(namePrefix)) {
-        throw new Exception(s"$namePrefix is not a valid prefix for an application name")
+      val namePrefix = config.getString("namePrefix")
+      if (namePrefix.nonEmpty) {
+        if (!Util.validApplicationName(namePrefix)) {
+          throw new Exception(s"$namePrefix is not a valid prefix for an application name")
+        }
+        System.setProperty(Constants.GEARPUMP_APP_NAME_PREFIX, namePrefix)
       }
-      System.setProperty(Constants.GEARPUMP_APP_NAME_PREFIX, namePrefix)
-    }
 
-    val jarFile = new java.io.File(jar)
+      val jarFile = new java.io.File(jar)
 
-    //start main class
-    Option(jarFile.exists()) match {
-      case Some(true) =>
-        val main = config.remainArgs(0)
-        val classLoader: URLClassLoader = new URLClassLoader(Array(new URL("file:" + jarFile.getAbsolutePath)),
-          Thread.currentThread().getContextClassLoader())
+      //start main class
+      Option(jarFile.exists()) match {
+        case Some(true) =>
+          val main = config.remainArgs(0)
+          val classLoader: URLClassLoader = new URLClassLoader(Array(new URL("file:" + jarFile.getAbsolutePath)),
+            Thread.currentThread().getContextClassLoader())
 
-        //set the context classloader as ActorSystem will use context classloader in precedence.
-        Thread.currentThread().setContextClassLoader(classLoader)
-        val clazz = classLoader.loadClass(main)
-        val mainMethod = clazz.getMethod("main", classOf[Array[String]])
-        mainMethod.invoke(null, config.remainArgs.drop(1))
+          //set the context classloader as ActorSystem will use context classloader in precedence.
+          Thread.currentThread().setContextClassLoader(classLoader)
+          val clazz = classLoader.loadClass(main)
+          val mainMethod = clazz.getMethod("main", classOf[Array[String]])
+          //scalastyle:off null
+          mainMethod.invoke(null, config.remainArgs.drop(1))
+        //scalastyle:on null
 
-      case Some(false) =>
-        LOG.info(s"jar $jar does not exist")
-      case None =>
-        LOG.info("jar file required")
+        case Some(false) =>
+          LOG.info(s"jar $jar does not exist")
+        case None =>
+          LOG.info("jar file required")
+      }
     }
   }
 

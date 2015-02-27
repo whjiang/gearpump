@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -37,20 +37,18 @@ object ClusterConfigSource {
    * Construct ClusterConfigSource from resource name or file path
    */
   def apply(filePath: String): ClusterConfigSource = {
+    var config = Option(ConfigFactory.parseFileAnySyntax(new File(filePath),
+      ConfigParseOptions.defaults.setAllowMissing(true)))
 
-    var config = ConfigFactory.parseFileAnySyntax(new File(filePath),
-      ConfigParseOptions.defaults.setAllowMissing(true))
-
-    if (null == config || config.isEmpty) {
-      config = ConfigFactory.parseResourcesAnySyntax(filePath,
-        ConfigParseOptions.defaults.setAllowMissing(true))
+    if (config.isEmpty || config.get.isEmpty) {
+      config = Option(ConfigFactory.parseResourcesAnySyntax(filePath,
+        ConfigParseOptions.defaults.setAllowMissing(true)))
     }
-    config
 
-    new ClusterConfigSourceImpl(config)
+    new ClusterConfigSourceImpl(config.get)
   }
 
-  implicit def FilePathToClusterConfigSource(filePath: String): ClusterConfigSource = {
+  implicit def filePathToClusterConfigSource(filePath: String): ClusterConfigSource = {
     apply(filePath)
   }
 

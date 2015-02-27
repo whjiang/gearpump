@@ -25,11 +25,12 @@ import com.codahale.metrics.{Histogram => CodaHaleHistogram}
  */
 class Histogram(val name : String, hisgram : CodaHaleHistogram, sampleRate : Int = 1) {
   private var sampleCount = 0L
+  private val histogram = Option(hisgram)
 
   def update(value: Long) {
     sampleCount += 1
-    if (null != hisgram && sampleCount % sampleRate == 0) {
-      hisgram.update(value)
+    if (sampleCount % sampleRate == 0) {
+      histogram.foreach(_.update(value))
     }
   }
 

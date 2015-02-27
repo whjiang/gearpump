@@ -28,6 +28,7 @@ import org.apache.gearpump.cluster.worker.WorkerDescription
 import scala.reflect.ClassTag
 import scala.util.Try
 
+//scalastyle:off number.of.types
 /**
  * Cluster Bootup Flow
  */
@@ -39,7 +40,9 @@ object WorkerToMaster {
 
 object MasterToWorker {
   case class WorkerRegistered(workerId : Int, masterInfo: MasterInfo)
+  //scalastyle:off null
   case class UpdateResourceFailed(reason : String = null, ex: Throwable = null)
+  //scalastyle:on null
   case object UpdateResourceSucceed
 }
 
@@ -90,6 +93,7 @@ object AppMasterToMaster {
     def toJson: String
   }
 
+  //scalastyle:off null
   case class GeneralAppMasterDataDetail(
       appId: Int, appName: String = null, actorPath: String = null, executors: List[String] = null)
     extends AppMasterDataDetail {
@@ -97,6 +101,7 @@ object AppMasterToMaster {
       upickle.write(this)
     }
   }
+  //scalastyle:on null
 
   case object GetAllWorkers
   case class GetWorkerData(workerId: Int)
@@ -115,6 +120,10 @@ object MasterToAppMaster {
         case _ =>
           false
       }
+    }
+
+    override def hashCode(): Int = {
+      allocations.foldLeft(0) {(h, ra) => h + ra.hashCode()}
     }
   }
   case class AppMasterRegistered(appId: Int)
@@ -145,9 +154,12 @@ object AppMasterToWorker {
 }
 
 object WorkerToAppMaster {
+  //scalastyle:off null
   case class ExecutorLaunchRejected(reason: String = null, ex: Throwable = null)
   case class ShutdownExecutorSucceed(appId: Int, executorId: Int)
   case class ShutdownExecutorFailed(reason: String = null, ex: Throwable = null)
+  //scalastyle:on null
 }
+//scalastyle:off number.of.types
 
 

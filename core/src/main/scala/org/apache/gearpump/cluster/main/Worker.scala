@@ -39,7 +39,7 @@ Worker extends App with ArgumentsParser {
     LogUtil.getLogger(getClass)
   }
 
-  def uuid = java.util.UUID.randomUUID.toString
+  def uuid: String = java.util.UUID.randomUUID.toString
 
   val options = Array.empty[(String, CLIOption[Any])]
 

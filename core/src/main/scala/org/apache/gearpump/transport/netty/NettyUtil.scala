@@ -38,7 +38,7 @@ object NettyUtil {
     (port, channel)
   }
 
-  def createServerBootStrap(factory: ChannelFactory, pipelineFactory: ChannelPipelineFactory, buffer_size: Int) = {
+  def createServerBootStrap(factory: ChannelFactory, pipelineFactory: ChannelPipelineFactory, buffer_size: Int): ServerBootstrap = {
     val bootstrap = new ServerBootstrap(factory)
     bootstrap.setOption("child.tcpNoDelay", true)
     bootstrap.setOption("child.receiveBufferSize", buffer_size)
@@ -47,7 +47,7 @@ object NettyUtil {
     bootstrap
   }
 
-  def createClientBootStrap(factory: ChannelFactory, pipelineFactory: ChannelPipelineFactory, buffer_size: Int) = {
+  def createClientBootStrap(factory: ChannelFactory, pipelineFactory: ChannelPipelineFactory, buffer_size: Int): ClientBootstrap = {
     val bootstrap = new ClientBootstrap(factory)
     bootstrap.setOption("tcpNoDelay", true)
     bootstrap.setOption("sendBufferSize", buffer_size)

@@ -26,7 +26,7 @@ object Shell extends App with ArgumentsParser {
   override val options: Array[(String, CLIOption[Any])] = Array(
     "master"-> CLIOption("<host1:port1,host2:port2,host3:port3>", required = true))
 
-
+  //scalastyle:off regex null return
   def shell() : Unit = {
     val config = parse(args)
     if (null == config) {
@@ -68,8 +68,9 @@ object Shell extends App with ArgumentsParser {
 
     scala.tools.nsc.MainGenericRunner.main(Array("-i", file.getAbsolutePath))
   }
+  //scalastyle:on regex null return
 
-  def getClassPath(scalaHome : String) = {
+  def getClassPath(scalaHome : String): String = {
     val classpath = System.getProperty("java.class.path")
     var classpathList = classpath.split(File.pathSeparator)
     classpathList :+= scalaHome + "/lib/*"

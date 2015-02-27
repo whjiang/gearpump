@@ -34,8 +34,9 @@ import com.typesafe.config.Config
  *  new applications. In most cases, you wouldnot need to change it. If you do need to change it,
  *  use ClusterConfigSource(filePath) to construct the object, while filePath points to the .conf file.
  */
-
+//scalastyle:off null
 case class Application(val name : String, val appMaster : String, val userConfig: UserConfig, val clusterConfig: ClusterConfigSource = null)
+//scalastyle:on null
 
 /**
  * Used for verification. All AppMaster must extend this interface
@@ -93,4 +94,8 @@ case class ExecutorContext(executorId : Int, workerId: Int, appId : Int,
  * process
  *
  */
-case class ExecutorJVMConfig(classPath : Array[String], jvmArguments : Array[String], mainClass : String, arguments : Array[String], jar: Option[AppJar], username : String, executorAkkaConfig: Config = null)
+//scalastyle:off null
+case class ExecutorJVMConfig(classPath : Array[String], jvmArguments : Array[String],
+                             mainClass : String, arguments : Array[String],
+                             jar: Option[AppJar], username : String, executorAkkaConfig: Config = null)
+//scalastyle:on null

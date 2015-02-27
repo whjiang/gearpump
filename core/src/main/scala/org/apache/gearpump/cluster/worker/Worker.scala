@@ -60,22 +60,22 @@ private[cluster] class Worker(masterProxy : ActorRef) extends Actor with TimeOut
   private var executorsInfo = Map[ActorRef, ExecutorInfo]()
   private var id = -1
   private val createdTime = System.currentTimeMillis()
-  private var masterInfo: MasterInfo = null
+  private var masterInfo: Option[MasterInfo] = None
   private var executorNameToActor = Map.empty[String, ActorRef]
 
   private var totalSlots: Int = 0
 
-  override def receive : Receive = null
+  override def receive : Receive = PartialFunction.empty
   val LOG : Logger = LogUtil.getLogger(getClass, worker = id)
 
   def waitForMasterConfirm(killSelf : Cancellable) : Receive = {
     case WorkerRegistered(id, masterInfo) =>
       this.id = id
-      this.masterInfo = masterInfo
+      this.masterInfo = Option(masterInfo)
       killSelf.cancel()
       context.watch(masterInfo.master)
       LOG.info(s"Worker $id Registered ....")
-      sendMsgWithTimeOutCallBack(masterInfo.master, ResourceUpdate(self, id, resource), 30, updateResourceTimeOut())
+      sendMsgWithTimeOutCallBack(masterInfo.master, ResourceUpdate(self, id, resource), MASTER_CONFIRM_TIMEOUT, updateResourceTimeOut())
       context.become(appMasterMsgHandler orElse terminationWatch(masterInfo.master) orElse ActorUtil.defaultMsgHandler(self))
   }
 
@@ -103,14 +103,14 @@ private[cluster] class Worker(masterProxy : ActorRef) extends Actor with TimeOut
       } else {
         val actorName = ActorUtil.actorNameForExecutor(launch.appId, launch.executorId)
 
-        val executor = context.actorOf(Props(classOf[ExecutorWatcher], launch, masterInfo))
+        val executor = context.actorOf(Props(classOf[ExecutorWatcher], launch, masterInfo.get))
         executorNameToActor += actorName ->executor
 
         resource = resource - launch.resource
         allocatedResource = allocatedResource + (executor -> launch.resource)
 
-        sendMsgWithTimeOutCallBack(masterInfo.master,
-          ResourceUpdate(self, id, resource), 30, updateResourceTimeOut())
+        sendMsgWithTimeOutCallBack(masterInfo.get.master,
+          ResourceUpdate(self, id, resource), MASTER_CONFIRM_TIMEOUT, updateResourceTimeOut())
         executorsInfo += executor -> ExecutorInfo(launch.appId, launch.executorId, launch.resource.slots)
         context.watch(executor)
       }
@@ -132,7 +132,7 @@ private[cluster] class Worker(masterProxy : ActorRef) extends Actor with TimeOut
       if (actor.compareTo(master) == 0) {
         // parent is down, let's make suicide
         LOG.info("parent master cannot be contacted, find a new master ...")
-        context.become(waitForMasterConfirm(repeatActionUtil(30)(masterProxy ! RegisterWorker(id))))
+        context.become(waitForMasterConfirm(repeatActionUtil(MASTER_CONFIRM_TIMEOUT)(masterProxy ! RegisterWorker(id))))
       } else if (ActorUtil.isChildActorPath(self, actor)) {
         //one executor is down,
         LOG.info(s"Executor is down ${actor.path.name}")
@@ -142,7 +142,7 @@ private[cluster] class Worker(masterProxy : ActorRef) extends Actor with TimeOut
           resource = resource + allocated.get
           executorsInfo -= actor
           allocatedResource = allocatedResource - actor
-          sendMsgWithTimeOutCallBack(master, ResourceUpdate(self, id, resource), 30, updateResourceTimeOut())
+          sendMsgWithTimeOutCallBack(master, ResourceUpdate(self, id, resource), MASTER_CONFIRM_TIMEOUT, updateResourceTimeOut())
         }
       }
   }
@@ -153,14 +153,14 @@ private[cluster] class Worker(masterProxy : ActorRef) extends Actor with TimeOut
     totalSlots = systemConfig.getInt(Constants.GEARPUMP_WORKER_SLOTS)
     this.resource = Resource(totalSlots)
     masterProxy ! RegisterNewWorker
-    context.become(waitForMasterConfirm(repeatActionUtil(30)(Unit)))
+    context.become(waitForMasterConfirm(repeatActionUtil(MASTER_CONFIRM_TIMEOUT)(Unit)))
   }
 
   private def repeatActionUtil(seconds: Int)(action : => Unit) : Cancellable = {
 
     val cancelSend = context.system.scheduler.schedule(Duration.Zero, Duration(2, TimeUnit.SECONDS))(action)
     val cancelSuicide = context.system.scheduler.scheduleOnce(FiniteDuration(seconds, TimeUnit.SECONDS), self, PoisonPill)
-    return new Cancellable {
+    new Cancellable {
       def cancel(): Boolean = {
         val result1 = cancelSend.cancel()
         val result2 = cancelSuicide.cancel()
@@ -180,6 +180,7 @@ private[cluster] class Worker(masterProxy : ActorRef) extends Actor with TimeOut
 }
 
 private[cluster] object Worker {
+  val MASTER_CONFIRM_TIMEOUT : Int = 30 //30s
 
   case class ExecutorResult(result : Try[Int])
   case class ExecutorInfo(appId: Int, executorId: Int, slots: Int)
@@ -193,14 +194,16 @@ private[cluster] object Worker {
 
     private val executorHandler = {
       val ctx = launch.executorJvmConfig
-      if (System.getProperty("LOCAL") != null) {
+      if (Option(System.getProperty("LOCAL")).isDefined) {
         new ExecutorHandler {
-          override def destroy = Unit // we cannot forcefully terminate a future by scala limit
+          override def destroy: Unit = Unit // we cannot forcefully terminate a future by scala limit
           override def exitValue : Future[Try[Int]] = Future {
               try {
                 val clazz = Class.forName(ctx.mainClass)
                 val main = clazz.getMethod("main", classOf[Array[String]])
+                //scalastyle:off null
                 main.invoke(null, ctx.arguments)
+                //scalastyle:on null
                 Success(0)
               } catch {
                 case e: Throwable => Failure(e)
@@ -213,7 +216,7 @@ private[cluster] object Worker {
         val jarPath = appJar.map {appJar =>
           val tempFile = File.createTempFile(appJar.name, ".jar")
           appJar.container.copyToLocalFile(tempFile)
-          val file = new URL("file:"+tempFile)
+          val file = new URL("file:" + tempFile)
           file.getFile
         }
 
@@ -246,7 +249,7 @@ private[cluster] object Worker {
         val process = Util.startProcess(options, classPath, ctx.mainClass, ctx.arguments)
 
         new ExecutorHandler {
-          override def destroy = {
+          override def destroy: Unit = {
             LOG.info(s"destroying executor process ${ctx.mainClass}")
             process.destroy()
             deleteTempFile

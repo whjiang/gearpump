@@ -29,6 +29,7 @@ object Info extends App with ArgumentsParser {
   override val options: Array[(String, CLIOption[Any])] = Array(
     "master"-> CLIOption("<host1:port1,host2:port2,host3:port3>", required = true))
 
+  //scalastyle:off regex null return
   def start : Unit = {
     val config = parse(args)
     if (null == config) {
@@ -48,6 +49,7 @@ object Info extends App with ArgumentsParser {
     }
     client.close()
   }
+  //scalastyle:on regex null return
 
   start
 }

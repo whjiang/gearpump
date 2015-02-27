@@ -28,7 +28,10 @@ import org.slf4j.Marker
 /**
  * A reporter class for logging metrics values to a remote actor periodically
  */
-class AkkaReporter(system: ActorSystem, registry: MetricRegistry, marker: Marker, rateUnit:TimeUnit, durationUnit:TimeUnit, filter: MetricFilter) extends ScheduledReporter(registry, "akka-reporter", filter, rateUnit, durationUnit) {
+class AkkaReporter(system: ActorSystem, registry: MetricRegistry, marker: Marker, rateUnit:TimeUnit,
+                   durationUnit:TimeUnit, filter: MetricFilter)
+  extends ScheduledReporter(registry, "akka-reporter", filter, rateUnit, durationUnit) {
+  //scalastyle:off method.length
     override def report(gauges: java.util.SortedMap[String, com.codahale.metrics.Gauge[_]],
                        counters: java.util.SortedMap[String, com.codahale.metrics.Counter],
                        histograms: java.util.SortedMap[String, com.codahale.metrics.Histogram],
@@ -67,7 +70,8 @@ class AkkaReporter(system: ActorSystem, registry: MetricRegistry, marker: Marker
       smeters.foreach(pair => {
         import org.apache.gearpump.metrics.Metrics._
         val (key, value: com.codahale.metrics.Meter) = pair
-        system.eventStream.publish(Meter(key, value.getCount, convertRate(value.getMeanRate), convertRate(value.getOneMinuteRate), convertRate(value.getFiveMinuteRate),
+        system.eventStream.publish(Meter(key, value.getCount, convertRate(value.getMeanRate),
+          convertRate(value.getOneMinuteRate), convertRate(value.getFiveMinuteRate),
           convertRate(value.getFifteenMinuteRate), getRateUnit))
       })
 
@@ -77,12 +81,14 @@ class AkkaReporter(system: ActorSystem, registry: MetricRegistry, marker: Marker
         val (key, value: com.codahale.metrics.Timer) = pair
         val s = value.getSnapshot
         system.eventStream.publish(Timer(key, value.getCount, convertDuration(s.getMin), convertDuration(s.getMax), convertDuration(s.getMean),
-        convertDuration(s.getStdDev), convertDuration(s.getMedian), convertDuration(s.get75thPercentile), convertDuration(s.get95thPercentile), convertDuration(s.get98thPercentile),
-          convertDuration(s.get99thPercentile), convertDuration(s.get999thPercentile), convertRate(value.getMeanRate), convertRate(value.getOneMinuteRate),
+        convertDuration(s.getStdDev), convertDuration(s.getMedian), convertDuration(s.get75thPercentile),
+          convertDuration(s.get95thPercentile), convertDuration(s.get98thPercentile), convertDuration(s.get99thPercentile),
+          convertDuration(s.get999thPercentile), convertRate(value.getMeanRate), convertRate(value.getOneMinuteRate),
           convertRate(value.getFiveMinuteRate), convertRate(value.getFifteenMinuteRate), getRateUnit, getDurationUnit))
 
       })
     }
+  //scalastyle:on method.length
 
     override def getRateUnit: String = {
       "events/" + super.getRateUnit
@@ -92,29 +98,32 @@ class AkkaReporter(system: ActorSystem, registry: MetricRegistry, marker: Marker
 object AkkaReporter {
   case class Builder(registry: MetricRegistry, marker: Marker, var rateUnit: TimeUnit, var durationUnit: TimeUnit, var flter: MetricFilter) {
 
-    def build(system: ActorSystem) = {
+    def build(system: ActorSystem): AkkaReporter = {
       new AkkaReporter(system, registry, marker, rateUnit, durationUnit, flter)
     }
 
-    def convertRatesTo(ru: TimeUnit) = {
+    def convertRatesTo(ru: TimeUnit): Builder = {
       this.rateUnit = ru
       this
     }
 
-    def convertDurationsTo(du: TimeUnit) = {
+    def convertDurationsTo(du: TimeUnit): Builder = {
       this.durationUnit = du
       this
     }
 
-    def filter(f: MetricFilter) = {
+    def filter(f: MetricFilter): Builder = {
       this.flter = f
       this
     }
   }
 
+  //scalastyle:off null
   object Builder {
     def apply(registry: MetricRegistry): Builder = Builder(registry, null, TimeUnit.SECONDS, TimeUnit.MILLISECONDS, MetricFilter.ALL)
   }
+  //scalastyle:on null
+
   def forRegistry(registry: MetricRegistry): Builder = {
     Builder(registry)
   }

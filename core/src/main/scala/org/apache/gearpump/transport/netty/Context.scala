@@ -34,9 +34,10 @@ import scala.language.implicitConversions
 
 object Context {
   private final val LOG: Logger = LogUtil.getLogger(getClass)
+  private val BUFFER_SIZE = 5242880
 
-  implicit def toCloseable(fun : () => Any)  = new Closeable {
-    override def close = fun()
+  implicit def toCloseable(fun : () => Any): Closeable  = new Closeable {
+    override def close: Unit = fun()
   }
 }
 
@@ -67,7 +68,7 @@ import org.apache.gearpump.transport.netty.Context._
     //TODO: whether we should expose it as application config?
     val taskDispatcher = system.settings.config.getString("gearpump.task-dispatcher")
     val server = system.actorOf(Props(classOf[Server], name, conf, lookupActor, deserializeFlag).withDispatcher(taskDispatcher), name)
-    val (port, channel) = NettyUtil.newNettyServer(name, new ServerPipelineFactory(server), 5242880, inputPort)
+    val (port, channel) = NettyUtil.newNettyServer(name, new ServerPipelineFactory(server), BUFFER_SIZE, inputPort)
     val factory = channel.getFactory
     closeHandler.add{ () =>
         system.stop(server)

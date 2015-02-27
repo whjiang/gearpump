@@ -34,15 +34,15 @@ class Metrics(sampleRate: Int) extends Extension {
 
   val registry = new MetricRegistry()
 
-  def meter(name : String) = {
+  def meter(name : String): Meter = {
     new Meter(name, registry.meter(name), sampleRate)
   }
 
-  def histogram(name : String) = {
+  def histogram(name : String): Histogram = {
     new Histogram(name, registry.histogram(name), sampleRate)
   }
 
-  def counter(name : String) = {
+  def counter(name : String): Counter = {
     new Counter(name, registry.counter(name), sampleRate)
   }
 }
@@ -80,7 +80,7 @@ object Metrics extends ExtensionId[Metrics] with ExtensionIdProvider {
 
   override def get(system: ActorSystem): Metrics = super.get(system)
 
-  override def lookup = Metrics
+  override def lookup: ExtensionId[Metrics] = Metrics
 
   override def createExtension(system: ExtendedActorSystem): Metrics = Metrics(system)
 
@@ -95,72 +95,72 @@ object Metrics extends ExtensionId[Metrics] with ExtensionIdProvider {
 
       val reportInterval = system.settings.config.getInt(GEARPUMP_METRIC_REPORT_INTERVAL)
 
-      def startGraphiteReporter = {
-        val graphiteHost = system.settings.config.getString(GEARPUMP_METRIC_GRAPHITE_HOST)
-        val graphitePort = system.settings.config.getInt(GEARPUMP_METRIC_GRAPHITE_PORT)
-
-        val graphite = new Graphite(new InetSocketAddress(graphiteHost, graphitePort))
-
-        val reporter = GraphiteReporter.forRegistry(meters.registry)
-          .prefixedWith(s"host${system.provider.getDefaultAddress.host.get}".replace(".", "_"))
-          .convertRatesTo(TimeUnit.SECONDS)
-          .convertDurationsTo(TimeUnit.MILLISECONDS)
-          .filter(MetricFilter.ALL)
-          .build(graphite)
-
-        LOG.info(s"reporting to $graphiteHost, $graphitePort")
-
-        reporter.start(reportInterval, TimeUnit.MILLISECONDS)
-
-        system.registerOnTermination(new Runnable {
-          override def run = reporter.stop()
-        })
-      }
-
-      def startSlf4jReporter = {
-
-        val reporter = Slf4jReporter.forRegistry(meters.registry)
-          .convertRatesTo(TimeUnit.SECONDS)
-          .convertDurationsTo(TimeUnit.MILLISECONDS)
-          .filter(MetricFilter.ALL)
-          .outputTo(LOG)
-          .build()
-
-        reporter.start(reportInterval, TimeUnit.MILLISECONDS)
-
-        system.registerOnTermination(new Runnable {
-          override def run = reporter.stop()
-        })
-      }
-
-      def startAkkaReporter = {
-
-        val reporter = AkkaReporter.forRegistry(meters.registry)
-          .convertRatesTo(TimeUnit.SECONDS)
-          .convertDurationsTo(TimeUnit.MILLISECONDS)
-          .filter(MetricFilter.ALL)
-          .build(system)
-
-        reporter.start(reportInterval, TimeUnit.MILLISECONDS)
-
-        system.registerOnTermination(new Runnable {
-          override def run = reporter.stop()
-        })
-      }
-
       val reporter = system.settings.config.getString(GEARPUMP_METRIC_REPORTER)
 
       LOG.info(s"Metrics reporter is enabled, using $reporter reporter")
 
       reporter match {
-        case "graphite" => startGraphiteReporter
-        case "logfile" => startSlf4jReporter
-        case "akka" => startAkkaReporter
+        case "graphite" => startGraphiteReporter(system, meters, reportInterval)
+        case "logfile" => startSlf4jReporter(system, meters, reportInterval)
+        case "akka" => startAkkaReporter(system, meters, reportInterval)
         case other =>
           LOG.error(s"Metrics reporter will be disabled, as we cannot recognize reporter: $other")
       }
     }
 
     meters
+  }
+
+  private def startGraphiteReporter(system: ExtendedActorSystem, meters: Metrics, reportInterval: Int) = {
+    val graphiteHost = system.settings.config.getString(GEARPUMP_METRIC_GRAPHITE_HOST)
+    val graphitePort = system.settings.config.getInt(GEARPUMP_METRIC_GRAPHITE_PORT)
+
+    val graphite = new Graphite(new InetSocketAddress(graphiteHost, graphitePort))
+
+    val reporter = GraphiteReporter.forRegistry(meters.registry)
+      .prefixedWith(s"host${system.provider.getDefaultAddress.host.get}".replace(".", "_"))
+      .convertRatesTo(TimeUnit.SECONDS)
+      .convertDurationsTo(TimeUnit.MILLISECONDS)
+      .filter(MetricFilter.ALL)
+      .build(graphite)
+
+    LOG.info(s"reporting to $graphiteHost, $graphitePort")
+
+    reporter.start(reportInterval, TimeUnit.MILLISECONDS)
+
+    system.registerOnTermination(new Runnable {
+      override def run: Unit = reporter.stop()
+    })
+  }
+
+  private def startSlf4jReporter(system: ExtendedActorSystem, meters: Metrics, reportInterval: Int) = {
+
+    val reporter = Slf4jReporter.forRegistry(meters.registry)
+      .convertRatesTo(TimeUnit.SECONDS)
+      .convertDurationsTo(TimeUnit.MILLISECONDS)
+      .filter(MetricFilter.ALL)
+      .outputTo(LOG)
+      .build()
+
+    reporter.start(reportInterval, TimeUnit.MILLISECONDS)
+
+    system.registerOnTermination(new Runnable {
+      override def run: Unit = reporter.stop()
+    })
+  }
+
+  private def startAkkaReporter(system: ExtendedActorSystem, meters: Metrics, reportInterval: Int) = {
+
+    val reporter = AkkaReporter.forRegistry(meters.registry)
+      .convertRatesTo(TimeUnit.SECONDS)
+      .convertDurationsTo(TimeUnit.MILLISECONDS)
+      .filter(MetricFilter.ALL)
+      .build(system)
+
+    reporter.start(reportInterval, TimeUnit.MILLISECONDS)
+
+    system.registerOnTermination(new Runnable {
+      override def run: Unit = reporter.stop()
+    })
   }
 }

@@ -23,6 +23,7 @@ import com.codahale.metrics.{Meter => CodaHaleMeter}
 class Meter(val name : String, meter : CodaHaleMeter, sampleRate : Int = 1) {
   private var sampleCount = 0L
   private var toBeMarked = 0L
+  private val meterOption = Option(meter)
 
   def mark() {
     meter.mark(1)
@@ -31,9 +32,11 @@ class Meter(val name : String, meter : CodaHaleMeter, sampleRate : Int = 1) {
   def mark(n: Long) {
     toBeMarked += n
     sampleCount += 1
-    if (null != meter && sampleCount % sampleRate == 0) {
-      meter.mark(toBeMarked)
-      toBeMarked = 0
+    if (sampleCount % sampleRate == 0) {
+      meterOption.foreach { m =>
+        m.mark(toBeMarked)
+        toBeMarked = 0
+      }
     }
   }
 

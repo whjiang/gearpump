@@ -42,7 +42,7 @@ class Server(name: String, conf: NettyConfig, lookupActor : ActorLookupById, des
 
   val serializer = new FastKryoSerializer(system)
 
-  def receive = msgHandler orElse channelManager
+  def receive : Receive = msgHandler orElse channelManager
   //As we will only transfer TaskId on the wire, this object will translate taskId to or from ActorRef
   private val taskIdActorRefTranslation = new TaskIdActorRefTranslation(context)
 
@@ -64,19 +64,20 @@ class Server(name: String, conf: NettyConfig, lookupActor : ActorLookupById, des
 
         if (actor.isEmpty) {
           LOG.error(s"Cannot find actor for id: $taskId...")
-        } else taskMessages.foreach { taskMessage =>
-
-          if (deserializeFlag) {
-            val msg = serializer.deserialize(taskMessage.message())
-            actor.get.tell(msg, taskIdActorRefTranslation.translateToActorRef(taskMessage.sourceTask(), taskMessage.sessionId()))
-          } else {
-            actor.get.tell(taskMessage, taskIdActorRefTranslation.translateToActorRef(taskMessage.sourceTask(), taskMessage.sessionId()))
+        } else {
+          taskMessages.foreach { taskMessage =>
+            if (deserializeFlag) {
+              val msg = serializer.deserialize(taskMessage.message())
+              actor.get.tell(msg, taskIdActorRefTranslation.translateToActorRef(taskMessage.sourceTask(), taskMessage.sessionId()))
+            } else {
+              actor.get.tell(taskMessage, taskIdActorRefTranslation.translateToActorRef(taskMessage.sourceTask(), taskMessage.sessionId()))
+            }
           }
         }
       }
   }
 
-  override def postStop() = {
+  override def postStop() : Unit = {
     allChannels.close.awaitUninterruptibly
   }
 }
@@ -95,7 +96,7 @@ object Server {
   object FakeActorRefForTaskHelper {
     @deprecated("", "")
     class  Helper {
-      def fakeActorRefForTaskForwarder(context: ActorContext, taskId: Long, sessonId : Int) = fakeActorRefForTask(context, taskId, sessonId)
+      def fakeActorRefForTaskForwarder(context: ActorContext, taskId: Long, sessonId : Int): ActorRef = fakeActorRefForTask(context, taskId, sessonId)
     }
     object Helper extends Helper
   }
@@ -119,9 +120,7 @@ object Server {
 
     override def messageReceived(ctx: ChannelHandlerContext, e: MessageEvent) {
       val msgs: util.List[TaskMessage] = e.getMessage.asInstanceOf[util.List[TaskMessage]]
-      if (msgs != null) {
-        server ! MsgBatch(msgs)
-      }
+      Option(msgs) foreach { server ! MsgBatch(_)}
     }
 
     override def exceptionCaught(ctx: ChannelHandlerContext, e: ExceptionEvent) {

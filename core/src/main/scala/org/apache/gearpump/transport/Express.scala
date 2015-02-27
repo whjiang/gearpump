@@ -52,7 +52,7 @@ class Express(val system: ExtendedActorSystem) extends Extension with ActorLooku
     LOG.info(s"bining to netty server $localHost")
 
     system.registerOnTermination(new Runnable {
-      override def run = context.close
+      override def run : Unit = context.close
     })
     (context, serverPort, localHost)
   }
@@ -91,9 +91,9 @@ class Express(val system: ExtendedActorSystem) extends Extension with ActorLooku
     localActorMap.sendOff(_ + (id -> actor))
   }
 
-  def lookupLocalActor(id: Long) = localActorMap.get().get(id)
+  def lookupLocalActor(id: Long) : Option[ActorRef] = localActorMap.get().get(id)
 
-  def lookupRemoteAddress(id : Long) = remoteAddressMap.get().get(id)
+  def lookupRemoteAddress(id : Long) : Option[HostPort] = remoteAddressMap.get().get(id)
 
   //transport to remote address
   def transport(taskMessage: TaskMessage, remote: HostPort): Unit = {
@@ -114,7 +114,7 @@ object Express extends ExtensionId[Express] with ExtensionIdProvider {
 
   override def get(system: ActorSystem): Express = super.get(system)
 
-  override def lookup = Express
+  override def lookup : ExtensionId[Express] = Express
 
   override def createExtension(system: ExtendedActorSystem): Express = new Express(system)
 }

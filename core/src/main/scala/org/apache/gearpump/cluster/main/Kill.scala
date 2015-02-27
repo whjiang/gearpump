@@ -31,19 +31,17 @@ object Kill extends App with ArgumentsParser {
     "appid" -> CLIOption("<application id>", required = true))
 
   def start : Unit = {
-    val config = parse(args)
+    val config = Option(parse(args))
 
-    if (null == config) {
-      return
+    if(config.isDefined) {
+      val masters = config.get.getString("master")
+      LOG.info("Master URL: {}", masters)
+
+      val client = ClientContext(masters)
+      LOG.info("Client ")
+      client.shutdown(config.get.getInt("appid"))
+      client.close()
     }
-
-    val masters = config.getString("master")
-    LOG.info("Master URL: {}", masters)
-
-    val client = ClientContext(masters)
-    LOG.info("Client ")
-    client.shutdown(config.getInt("appid"))
-    client.close()
   }
 
   start
