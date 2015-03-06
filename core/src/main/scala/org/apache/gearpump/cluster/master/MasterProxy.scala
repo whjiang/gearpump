@@ -50,7 +50,7 @@ class MasterProxy (masters: Iterable[ActorPath])
 
   import context.dispatcher
 
-  def findMaster() = repeatActionUtil(30){
+  def findMaster(): Cancellable = repeatActionUtil(MasterProxy.TIMEOUT){
     contacts foreach { contact =>
       LOG.info(s"sending identity to $contact")
       contact ! Identify(None)
@@ -101,7 +101,7 @@ class MasterProxy (masters: Iterable[ActorPath])
       master forward msg
   }
 
-  def scheduler = context.system.scheduler
+  def scheduler: Scheduler = context.system.scheduler
   import scala.concurrent.duration._
   private def repeatActionUtil(seconds: Int)(action : => Unit) : Cancellable = {
     val cancelSend = scheduler.schedule(0 seconds, 2 seconds)(action)
@@ -121,6 +121,7 @@ class MasterProxy (masters: Iterable[ActorPath])
 }
 
 object MasterProxy {
+  val TIMEOUT = 30 //30s
   case object MasterRestarted
   case object MasterStopped
   case class WatchMaster(watcher: ActorRef)

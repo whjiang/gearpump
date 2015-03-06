@@ -33,11 +33,7 @@ import org.apache.gearpump.cluster.UserConfig._
   }
 
   def withString(key: String, value: String): UserConfig = {
-    if (null == value) {
-      this
-    } else {
-      new UserConfig(_config + (key -> value))
-    }
+    Option(value).map(v => new UserConfig(_config + (key -> v))).getOrElse(this)
   }
 
   def getInt(key : String) : Option[Int] = {
@@ -53,11 +49,9 @@ import org.apache.gearpump.cluster.UserConfig._
   }
 
   def withBytes(key: String, value: Array[Byte]): UserConfig = {
-    if (null == value) {
-      this
-    } else {
-      this.withString(key, BaseEncoding.base64().encode(value))
-    }
+    Option(value).map { v =>
+      this.withString(key, BaseEncoding.base64().encode(v))
+    } getOrElse(this)
   }
 
   /**
@@ -85,30 +79,23 @@ import org.apache.gearpump.cluster.UserConfig._
    * @see [[http://doc.akka.io/docs/akka/snapshot/scala/serialization.html#A_Word_About_Java_Serialization]]
    */
   def withValue[T<: AnyRef with java.io.Serializable](key: String, value: T)(implicit system: ActorSystem): UserConfig = {
-
-    if (null == value) {
-      this
-    } else {
+    Option(value).map { v =>
       val serializer = new JavaSerializer(system.asInstanceOf[ExtendedActorSystem])
-      val bytes = serializer.toBinary(value)
+      val bytes = serializer.toBinary(v)
       val encoded = BaseEncoding.base64().encode(bytes)
       this.withString(key, encoded)
-    }
+    } getOrElse(this)
   }
 
-  def withConfig(other: UserConfig) = {
-    if (null == other) {
-      this
-    } else {
-      new UserConfig(_config ++ other._config)
-    }
+  def withConfig(other: UserConfig): UserConfig = {
+    Option(other).map(o => new UserConfig(_config ++ o._config)).getOrElse(this)
   }
 }
 
 object UserConfig{
 
-  def empty = new UserConfig(Map.empty[String, String])
+  def empty: UserConfig = new UserConfig(Map.empty[String, String])
 
-  def apply(config : Map[String, String]) = new UserConfig(config)
+  def apply(config : Map[String, String]): UserConfig = new UserConfig(config)
 
 }

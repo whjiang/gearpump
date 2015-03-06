@@ -51,7 +51,9 @@ class AppMasterLauncher(
 
   val scheduler = context.system.scheduler
   val systemConfig = context.system.settings.config
+  //scalastyle:off magic.number
   val TIMEOUT = Duration(15, TimeUnit.SECONDS)
+  //scalastyle:on magic.number
 
   val appMasterAkkaConfig: Config = Option(clusterConfig).map(_.getConfig).getOrElse(ConfigFactory.empty())
   LOG.info(s"AppManager asking Master for resource for app $appId...")
@@ -67,7 +69,9 @@ class AppMasterLauncher(
       val submissionTime = System.currentTimeMillis()
       val appMasterInfo = AppMasterRuntimeInfo(appId, app.name, worker, username,
         submissionTime, config = appMasterAkkaConfig)
+      //scalastyle:off null
       val appMasterContext = AppMasterContext(appId, username, resource, jar, null, appMasterInfo)
+      //scalastyle:on null
 
       LOG.info(s"Try to launch a executor for app Master on ${worker} for app $appId")
       val name = ActorUtil.actorNameForExecutor(appId, executorId)
@@ -123,11 +127,13 @@ class AppMasterLauncher(
 }
 
 object AppMasterLauncher extends AppMasterLauncherFactory{
-  def props(appId : Int, executorId: Int, app : Application, jar: Option[AppJar], username : String, master : ActorRef, client: Option[ActorRef]) = {
+  def props(appId : Int, executorId: Int, app : Application, jar: Option[AppJar],
+            username : String, master : ActorRef, client: Option[ActorRef]): Props = {
     Props(new AppMasterLauncher(appId, executorId, app, jar, username, master, client))
   }
 }
 
 trait AppMasterLauncherFactory {
-  def props(appId : Int, executorId: Int, app : Application, jar: Option[AppJar], username : String, master : ActorRef, client: Option[ActorRef]) : Props
+  def props(appId : Int, executorId: Int, app : Application, jar: Option[AppJar],
+            username : String, master : ActorRef, client: Option[ActorRef]) : Props
 }

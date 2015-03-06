@@ -38,7 +38,10 @@ trait ClusterReplication extends Actor with Stash {
   implicit val executionContext = context.dispatcher
   implicit val cluster = Cluster(context.system)
 
+  //scalastyle:off magic.number
   val TIMEOUT = Duration(5, TimeUnit.SECONDS)
+  //scalastyle:on magic.number
+
   val STATE = "masterstate"
   val KVService = "kvService"
   implicit val timeout = Constants.FUTURE_TIMEOUT

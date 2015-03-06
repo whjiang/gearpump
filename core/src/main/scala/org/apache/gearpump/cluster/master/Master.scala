@@ -49,9 +49,9 @@ private[cluster] class Master extends Actor with Stash {
   // heartbeat of worker and appmaster when master singleton is migrated.
   // we don't need to persist them in cluster
 
-  private var appManager : ActorRef = null
+  private var appManager : Option[ActorRef] = None
 
-  private var scheduler : ActorRef = null
+  private var scheduler : Option[ActorRef] = None
 
   private var workers = new immutable.HashMap[ActorRef, Int]
 
@@ -75,8 +75,12 @@ private[cluster] class Master extends Actor with Stash {
   final val undefinedUid = 0
   @tailrec final def newUid(): Int = {
     val uid = Util.randInt
-    if (uid == undefinedUid) newUid()
-    else uid
+    if (uid == undefinedUid) {
+      newUid()
+    }
+    else {
+      uid
+    }
   }
 
   def workerMsgHandler : Receive = {
@@ -86,11 +90,11 @@ private[cluster] class Master extends Actor with Stash {
     case RegisterWorker(id) =>
       context.watch(sender())
       sender ! WorkerRegistered(id, MasterInfo(self, birth))
-      scheduler forward WorkerRegistered(id, MasterInfo(self, birth))
+      scheduler.foreach(_ forward WorkerRegistered(id, MasterInfo(self, birth)))
       workers += (sender() -> id)
       LOG.info(s"Register Worker $id....")
     case resourceUpdate : ResourceUpdate =>
-      scheduler forward resourceUpdate
+      scheduler.foreach(_ forward resourceUpdate)
   }
 
   def jarStoreService : Receive = {
@@ -101,23 +105,23 @@ private[cluster] class Master extends Actor with Stash {
   //scalastyle:off cyclomatic.complexity
   def appMasterMsgHandler : Receive = {
     case  request : RequestResource =>
-      scheduler forward request
+      scheduler.foreach(_ forward request)
     case registerAppMaster : RegisterAppMaster =>
       //forward to appManager
-      appManager forward registerAppMaster
+      appManager.foreach(_ forward registerAppMaster)
     case AppMastersDataRequest =>
       LOG.info("Master received AppMastersDataRequest")
-      appManager forward AppMastersDataRequest
+      appManager.foreach(_ forward AppMastersDataRequest)
     case appMasterDataRequest: AppMasterDataRequest =>
       LOG.info("Master received AppMasterDataRequest")
-      appManager forward appMasterDataRequest
+      appManager.foreach(_ forward appMasterDataRequest)
     case query: QueryAppMasterConfig =>
       LOG.info("Master received QueryAppMasterConfig")
-      appManager forward query
+      appManager.foreach(_ forward query)
     case save : SaveAppData =>
-      appManager forward save
+      appManager.foreach(_ forward save)
     case get : GetAppData =>
-      appManager forward get
+      appManager.foreach(_ forward get)
     case GetAllWorkers =>
       sender ! WorkerList(workers.values.toList)
     case get@GetWorkerData(workerId) =>
@@ -132,11 +136,13 @@ private[cluster] class Master extends Actor with Stash {
       val aliveFor = System.currentTimeMillis() - birth
       val logFileDir = LogUtil.daemonLogDir(systemConfig).getAbsolutePath
       val userDir = System.getProperty("user.dir");
-      val masterDescription = MasterDescription(hostPort.toTuple, getMasterClusterList.map(_.toTuple), aliveFor, logFileDir, jarStoreRootPath, MasterStatus.Synced, userDir)
+      val masterDescription = MasterDescription(hostPort.toTuple,
+        getMasterClusterList.map(_.toTuple), aliveFor, logFileDir,
+        jarStoreRootPath, MasterStatus.Synced, userDir)
       sender ! MasterData(masterDescription)
 
     case invalidAppMaster: InvalidAppMaster =>
-      appManager forward invalidAppMaster
+      appManager.foreach(_ forward invalidAppMaster)
   }
   //scalastyle:on cyclomatic.complexity
 
@@ -156,23 +162,23 @@ private[cluster] class Master extends Actor with Stash {
   def clientMsgHandler : Receive = {
     case app : SubmitApplication =>
       LOG.info(s"Receive from client, SubmitApplication $app")
-      appManager.forward(app)
+      appManager.foreach(_.forward(app))
     case app : ShutdownApplication =>
       LOG.info(s"Receive from client, Shutting down Application ${app.appId}")
-      scheduler ! ApplicationFinished(app.appId)
-      appManager.forward(app)
+      scheduler.foreach(_ ! ApplicationFinished(app.appId))
+      appManager.foreach(_.forward(app))
     case app : ReplayFromTimestampWindowTrailingEdge =>
       LOG.info(s"Receive from client, Replaying Application ${app.appId} from timestamp window trailing edge")
-      appManager.forward(app)
+      appManager.foreach(_.forward(app))
     case app : ResolveAppId =>
       LOG.info(s"Receive from client, resolving appId ${app.appId} to ActorRef")
-      appManager.forward(app)
+      appManager.foreach(_.forward(app))
     case app : AppMasterDataDetailRequest =>
       LOG.info(s"Receive from client, forwarding to AppManager")
-      appManager.forward(app)
+      appManager.foreach(_.forward(app))
     case app : AppMasterMetricsRequest =>
       LOG.info(s"AppMasterMetricsRequestFromActor Receive from client, forwarding to AppManager")
-      appManager.forward(app)
+      appManager.foreach(_.forward(app))
 
   }
 
@@ -189,7 +195,7 @@ private[cluster] class Master extends Actor with Stash {
       LOG.info("Let's filter out dead resources...")
       // filter out dead worker resource
       if(workers.keySet.contains(actor)){
-        scheduler ! WorkerTerminated(workers.get(actor).get)
+        scheduler.foreach(_ ! WorkerTerminated(workers.get(actor).get))
         workers -= actor
       }
   }
@@ -202,8 +208,8 @@ private[cluster] class Master extends Actor with Stash {
     val masterHA = context.actorOf(Props(new MasterHAService()), "masterHA")
     val kvService = context.actorOf(Props(new InMemoryKVService()), "kvService")
 
-    appManager = context.actorOf(Props(new AppManager(masterHA, kvService, AppMasterLauncher)), classOf[AppManager].getSimpleName)
-    scheduler = context.actorOf(Props(schedulerClass))
+    appManager = Option(context.actorOf(Props(new AppManager(masterHA, kvService, AppMasterLauncher)), classOf[AppManager].getSimpleName))
+    scheduler = Option(context.actorOf(Props(schedulerClass)))
     context.system.eventStream.subscribe(self, classOf[DisassociatedEvent])
   }
 }
@@ -214,9 +220,11 @@ object Master {
 
   case class MasterInfo(master: ActorRef, startTime : Long = 0L)
 
+  //scalastyle:off null
   object MasterInfo {
-    def empty = MasterInfo(null)
+    def empty: MasterInfo = MasterInfo(null)
   }
+  //scalastyle:on null
 
   object MasterStatus {
     type Type = String

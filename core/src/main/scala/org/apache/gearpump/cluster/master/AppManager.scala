@@ -87,13 +87,15 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
 
   def receiveHandler : Receive = {
     val msg = "Application Manager started. Ready for application submission..."
+    //scalastyle:off regex
     System.out.println(msg)
+    //scalastyle:on regex
     LOG.info(msg)
 
     clientMsgHandler orElse appMasterMessage orElse selfMsgHandler orElse workerMessage orElse appDataStoreService orElse terminationWatch
   }
 
-  //scalastyle:off null cyclomatic.complexity
+  //scalastyle:off null cyclomatic.complexity method.length
   def clientMsgHandler: Receive = {
     case SubmitApplication(app, jar, username) =>
       LOG.info(s"AppManager Submiting Application $appId...")
@@ -101,7 +103,8 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
       if (applicationNameExist(app.name)) {
         client ! SubmitApplicationResult(Failure(new Exception(s"Application name ${app.name} already existed")))
       } else {
-        val appLauncher = context.actorOf(launcher.props(appId, executorId, app, jar, username, context.parent, Some(client)), s"launcher${appId}_${Util.randInt}")
+        val appLauncher = context.actorOf(launcher.props(appId, executorId, app, jar, username, context.parent, Some(client)),
+          s"launcher${appId}_${Util.randInt}")
 
         val appState = new ApplicationState(appId, app.name, 0, app, jar, username, null)
         masterHA ! UpdateMasterState(appState)
@@ -116,7 +119,7 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
           LOG.info(s"Shutdown app master at ${Option(worker).map(_.path).orNull}, appId: $appId, executorId: $executorId")
           cleanApplicationData(appId)
           val shutdown = ShutdownExecutor(appId, executorId, s"AppMaster $appId shutdown requested by master...")
-          sendMsgWithTimeOutCallBack(worker, shutdown, 30, shutDownExecutorTimeOut())
+          sendMsgWithTimeOutCallBack(worker, shutdown, AppManager.TIMEOUT, shutDownExecutorTimeOut())
           sender ! ShutdownApplicationResult(Success(appId))
         case None =>
           val errorMsg = s"Failed to find regisration information for appId: $appId"
@@ -231,7 +234,7 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
       }
 
   }
-  //scalastyle:on null cyclomatic.complexity
+  //scalastyle:on null cyclomatic.complexity method.length
 
   def workerMessage: Receive = {
     case ShutdownExecutorSucceed(appId, executorId) =>
@@ -271,7 +274,9 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
         case GetKVSuccess(privateKey, value) =>
           client ! GetAppDataResult(key, value)
         case GetKVFailed(ex) =>
+          //scalastyle:off null
           client ! GetAppDataResult(key, null)
+          //scalastyle:on null
       }
   }
 
@@ -329,6 +334,7 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
   }
 }
 
+//scalastyle:off null
 case class AppMasterRuntimeInfo(
     appId: Int,
     // appName is the unique Id for an application
@@ -340,6 +346,8 @@ case class AppMasterRuntimeInfo(
     finishTime: TimeStamp = 0,
     config: Config = null)
   extends AppMasterRegisterData
+//scalastyle:on null
 
 object AppManager {
+  val TIMEOUT = 30 //30s
 }

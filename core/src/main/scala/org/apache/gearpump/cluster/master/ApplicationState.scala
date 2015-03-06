@@ -23,7 +23,9 @@ import org.apache.gearpump.cluster.{AppJar, Application}
 /**
   * This state will be persisted across the masters.
   */
-case class ApplicationState(appId : Int, appName: String, attemptId : Int, app : Application, jar: Option[AppJar], username : String, state : Any) extends Serializable {
+case class ApplicationState(appId : Int, appName: String,
+                            attemptId : Int, app : Application, jar: Option[AppJar],
+                            username : String, state : Any) extends Serializable {
 
    override def equals(other: Any): Boolean = {
      other match {
