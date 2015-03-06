@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -133,8 +133,10 @@ object ExecutorSystemScheduler {
   case class StopExecutorSystem(system: ExecutorSystem)
   case object StartExecutorSystemTimeout
 
+  //scalastyle:off null
   case class ExecutorSystemJvmConfig(classPath : Array[String], jvmArguments : Array[String],
      jar: Option[AppJar], username : String, executorAkkaConfig: Config = null)
+  //scalastyle:on null
 
   /**
    * For each client which ask for an executor system, the scheduler will create a session for it.
@@ -142,7 +144,7 @@ object ExecutorSystemScheduler {
    * @param requestor
    * @param executorSystemJvmConfig
    */
-  private [appmaster]
+  private[appmaster]
   case class Session(requestor: ActorRef, executorSystemJvmConfig: ExecutorSystemJvmConfig)
 
   /**
@@ -152,10 +154,12 @@ object ExecutorSystemScheduler {
    */
   private[appmaster]
   class ResourceAgent(master: ActorRef, session: Session) extends Actor {
+    //scalastyle:off null
     private var resourceRequestor: ActorRef = null
     var timeOutClock: Cancellable = null
     private var unallocatedResource: Int = 0
     import context.dispatcher
+    //scalastyle:on null
 
     def receive: Receive = {
       case request: RequestResource =>

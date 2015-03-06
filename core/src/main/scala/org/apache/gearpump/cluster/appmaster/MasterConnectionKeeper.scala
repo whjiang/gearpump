@@ -7,7 +7,7 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -50,14 +50,15 @@ class MasterConnectionKeeper (
   import context.dispatcher
 
   private val LOG = LogUtil.getLogger(getClass)
-  private var master: ActorRef = null
 
   //Subscribe self to masterProxy,
   masterProxy ! WatchMaster(self)
 
   def registerAppMaster: Cancellable = {
     masterProxy ! register
-    context.system.scheduler.scheduleOnce(FiniteDuration(30, TimeUnit.SECONDS), self, AppMasterRegisterTimeout)
+    context.system.scheduler.scheduleOnce(
+      FiniteDuration(MasterConnectionKeeper.APPMASTER_REGISTER_TIMEOUT, TimeUnit.SECONDS),
+      self, AppMasterRegisterTimeout)
   }
 
   context.become(waitMasterToConfirm(registerAppMaster))
@@ -83,10 +84,12 @@ class MasterConnectionKeeper (
       context.stop(self)
   }
 
-  def receive: Receive = null
+  def receive: Receive = Actor.emptyBehavior
 }
 
 private[appmaster] object MasterConnectionKeeper {
+  val APPMASTER_REGISTER_TIMEOUT = 30 //30s
+
   case object AppMasterRegisterTimeout
 
   object MasterConnectionStatus {
