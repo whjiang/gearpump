@@ -40,6 +40,7 @@ trait  ArgumentsParser {
 
   val ignoreUnknownArgument = false
 
+  //scalastyle:off regex
   def help : Unit = {
     Console.println("Usage:")
     var usage = List(s"java ${removeTrailingDollarChar(this.getClass.toString)} " +
@@ -53,6 +54,7 @@ trait  ArgumentsParser {
     })
     usage.foreach(Console.println(_))
   }
+  //scalastyle:on regex
 
   private def removeTrailingDollarChar(className : String) : String = {
     if (className.endsWith("$")) {
@@ -65,6 +67,7 @@ trait  ArgumentsParser {
   val options : Array[(String, CLIOption[Any])]
   val remainArgs : Array[String] = Array.empty[String]
 
+  //scalastyle:off cyclomatic.complexity method.length null
   def parse(args: Array[String]) : ParseResult = {
 
     if (args == null || args.length == 0) {
@@ -132,4 +135,5 @@ trait  ArgumentsParser {
       new ParseResult(config, remain)
     }
   }
+  //scalastyle:on cyclomatic.complexity method.length null
 }

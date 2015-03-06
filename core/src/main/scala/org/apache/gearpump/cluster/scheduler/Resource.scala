@@ -18,8 +18,9 @@
 package org.apache.gearpump.cluster.scheduler
 import akka.actor.ActorRef
 
+//scalastyle:off covariant.equals method.name
 case class Resource(slots : Int) {
-  def +(other : Resource): Resource = Resource(slots + other.slots)
+  def + (other : Resource): Resource = Resource(slots + other.slots)
 
   def -(other : Resource): Resource = Resource(slots - other.slots)
 
@@ -31,6 +32,7 @@ case class Resource(slots : Int) {
 
   def isEmpty: Boolean = slots == 0
 }
+//scalastyle:on covariant.equals method.name
 
 object Priority extends Enumeration{
   type Priority = Value
@@ -49,8 +51,8 @@ case class ResourceRequest(resource: Resource,  workerId: Int = 0, priority: Pri
 case class ResourceAllocation(resource : Resource, worker : ActorRef, workerId : Int)
 
 object Resource {
-  def empty = new Resource(0)
+  def empty: Resource = new Resource(0)
 
-  def min(res1: Resource, res2: Resource) = if (res1.slots < res2.slots) res1 else res2
+  def min(res1: Resource, res2: Resource): Resource = if (res1.slots < res2.slots) res1 else res2
 }
 

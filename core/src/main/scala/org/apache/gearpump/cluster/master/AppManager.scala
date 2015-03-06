@@ -67,7 +67,7 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
   // dead appmaster list
   private var deadAppMasters = Map.empty[Int, (ActorRef, AppMasterRuntimeInfo)]
 
-  def receive: Receive = null
+  def receive: Receive = Actor.emptyBehavior
 
   masterHA ! GetMasterState
   context.become(waitForMasterState)
@@ -93,6 +93,7 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
     clientMsgHandler orElse appMasterMessage orElse selfMsgHandler orElse workerMessage orElse appDataStoreService orElse terminationWatch
   }
 
+  //scalastyle:off null
   def clientMsgHandler: Receive = {
     case SubmitApplication(app, jar, username) =>
       LOG.info(s"AppManager Submiting Application $appId...")
@@ -230,6 +231,7 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
       }
 
   }
+  //scalastyle:off null
 
   def workerMessage: Receive = {
     case ShutdownExecutorSucceed(appId, executorId) =>
@@ -237,7 +239,7 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
     case failed: ShutdownExecutorFailed =>
       LOG.error(failed.reason)
   }
-  
+
   private def shutDownExecutorTimeOut(): Unit = {
     LOG.error(s"Shut down executor time out")
   }
@@ -340,5 +342,4 @@ case class AppMasterRuntimeInfo(
   extends AppMasterRegisterData
 
 object AppManager {
-
 }

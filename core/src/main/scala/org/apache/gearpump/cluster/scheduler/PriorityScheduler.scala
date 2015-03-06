@@ -30,11 +30,12 @@ class PriorityScheduler extends Scheduler{
 
   private var resourceRequests = new mutable.PriorityQueue[PendingRequest]()(requestOrdering)
 
-  def requestOrdering = new Ordering[PendingRequest] {
-    override def compare(x: PendingRequest, y: PendingRequest) = {
+  def requestOrdering: Ordering[PendingRequest] = new Ordering[PendingRequest] {
+    override def compare(x: PendingRequest, y: PendingRequest): Int = {
       var res = x.request.priority.id - y.request.priority.id
-      if(res == 0)
+      if(res == 0) {
         res = y.timeStamp.compareTo(x.timeStamp)
+      }
       res
     }
   }

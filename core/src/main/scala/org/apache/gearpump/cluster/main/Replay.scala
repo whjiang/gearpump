@@ -30,18 +30,18 @@ object Replay extends App with ArgumentsParser {
     "appid" -> CLIOption("<application id>", required = true))
 
   def start : Unit = {
-    val config = parse(args)
+    val configOption = Option(parse(args))
 
-    if (null == config) {
-      return
+    configOption.foreach { config =>
+      val masters = config.getString("master")
+      //scalastyle:off regex
+      Console.out.println("Master URL: " + masters)
+      //scalastyle:on regex
+
+      val client = ClientContext(masters)
+      client.replayFromTimestampWindowTrailingEdge(config.getInt("appid"))
+      client.close()
     }
-
-    val masters = config.getString("master")
-    Console.out.println("Master URL: " + masters)
-
-    val client = ClientContext(masters)
-    client.replayFromTimestampWindowTrailingEdge(config.getInt("appid"))
-    client.close()
   }
 
   start

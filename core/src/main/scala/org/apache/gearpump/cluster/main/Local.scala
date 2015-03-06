@@ -48,12 +48,9 @@ object Local extends App with ArgumentsParser {
 
 
   def start() : Unit = {
-    val config = parse(args)
-    if (null == config) {
-      return
-    }
-
-    local(config.getString("ip"),  config.getInt("port"), config.getInt("workernum"), config.getBoolean("sameprocess"))
+    val configOption = Option(parse(args))
+    configOption.foreach { config =>
+      local(config.getString("ip"),  config.getInt("port"), config.getInt("workernum"), config.getBoolean("sameprocess")) }
   }
 
   def local(ip : String, port : Int, workerCount : Int, sameProcess : Boolean) : Unit = {

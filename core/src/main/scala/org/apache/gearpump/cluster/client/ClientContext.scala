@@ -24,6 +24,8 @@ import akka.pattern.ask
 import akka.actor.{ActorRef, ActorSystem}
 import akka.util.Timeout
 import org.apache.gearpump.cluster.ClientToMaster.GetJarFileContainer
+import org.apache.gearpump.cluster.MasterToAppMaster.AppMastersData
+import org.apache.gearpump.cluster.MasterToClient.ReplayApplicationResult
 import org.apache.gearpump.cluster._
 import org.apache.gearpump.cluster.master.MasterProxy
 import org.apache.gearpump.jarstore.JarFileContainer
@@ -38,7 +40,7 @@ import scala.concurrent.{Await, Future}
 //TODO: add interface to query master here
 class ClientContext(masters: Iterable[HostPort]) {
   private val LOG: Logger = LogUtil.getLogger(getClass)
-  private implicit val timeout = Timeout(5, TimeUnit.SECONDS)
+  private implicit val timeout = Timeout(ClientContext.TIMEOUT, TimeUnit.SECONDS)
 
   private val config = ClusterConfig.load.application
 
@@ -62,20 +64,16 @@ class ClientContext(masters: Iterable[HostPort]) {
     val client = new MasterClient(master)
     val appName = checkAndAddNamePrefix(app.name, System.getProperty(GEARPUMP_APP_NAME_PREFIX))
     val updatedApp = Application(appName, app.appMaster, app.userConfig, app.clusterConfig)
-    if (jarPath == null) {
-      client.submitApplication(updatedApp, None)
-    } else {
-      val appJar = loadFile(jarPath)
-      client.submitApplication(updatedApp, Option(appJar))
-    }
+    val appJar = Option(jarPath).map(loadFile(_))
+    client.submitApplication(updatedApp, appJar)
   }
 
-  def replayFromTimestampWindowTrailingEdge(appId : Int) = {
+  def replayFromTimestampWindowTrailingEdge(appId : Int): ReplayApplicationResult = {
     val client = new MasterClient(master)
     client.replayFromTimestampWindowTrailingEdge(appId)
   }
 
-  def listApps = {
+  def listApps: AppMastersData = {
     val client = new MasterClient(master)
     client.listApplications
   }
@@ -103,15 +101,12 @@ class ClientContext(masters: Iterable[HostPort]) {
       AppJar(jarFile.getName, container)
     }
 
-    Await.result(uploadFile, Duration(15, TimeUnit.SECONDS))
+    Await.result(uploadFile, Duration(ClientContext.UPLOAD_FILE_TIMEOUT, TimeUnit.SECONDS))
   }
 
   private def checkAndAddNamePrefix(appName: String, namePrefix: String) : String = {
-    val fullName = if (namePrefix != null && namePrefix != "") {
-      namePrefix + "_" + appName
-    } else {
-      appName
-    }
+    val prefix = Option(namePrefix).filter(!_.isEmpty).map(_ + "_").getOrElse("")
+    val fullName = prefix + appName
     if (!Util.validApplicationName(fullName)) {
       close()
       val error = s"The application name $appName is not a proper name. An app name can " +
@@ -123,13 +118,15 @@ class ClientContext(masters: Iterable[HostPort]) {
 }
 
 object ClientContext {
+  val UPLOAD_FILE_TIMEOUT = 15 //15s
+  val TIMEOUT = 5 //5s
   /**
    * masterList is a list of master node address
    * host1:port,host2:port2,host3:port3
    */
-  def apply(masterList : String) = {
+  def apply(masterList : String): ClientContext = {
     new ClientContext(Util.parseHostList(masterList))
   }
 
-  def apply(masters: Iterable[HostPort]) = new ClientContext(masters)
+  def apply(masters: Iterable[HostPort]): ClientContext = new ClientContext(masters)
 }

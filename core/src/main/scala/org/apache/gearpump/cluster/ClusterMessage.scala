@@ -135,7 +135,12 @@ object MasterToAppMaster {
   val AppMasterNonExist: AppMasterStatus = "nonexist"
 
   sealed trait StreamingType
-  case class AppMasterData(status: AppMasterStatus, appId: Int = 0, appName: String = null, appMasterPath: String = null, workerPath: String = null, submissionTime: TimeStamp = 0, startTime: TimeStamp = 0, finishTime: TimeStamp = 0, user: String = null)
+  //scalastyle:off null
+  case class AppMasterData(status: AppMasterStatus, appId: Int = 0,
+                           appName: String = null, appMasterPath: String = null,
+                           workerPath: String = null, submissionTime: TimeStamp = 0,
+                           startTime: TimeStamp = 0, finishTime: TimeStamp = 0, user: String = null)
+  //scalastyle:on null
   case class AppMasterDataRequest(appId: Int, detail: Boolean = false)
 
   case class AppMastersData(appMasters: List[AppMasterData])
