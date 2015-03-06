@@ -38,6 +38,7 @@ class MasterHAService extends Actor with Stash with ClusterReplication {
     replicator ! Unsubscribe(STATE, self)
   }
 
+  //scalastyle:off cyclomatic.complexity
   def stateService: Receive = {
     case GetMasterState =>
       val client = sender
@@ -83,6 +84,7 @@ class MasterHAService extends Actor with Stash with ClusterReplication {
       }
 
   }
+  //scalastyle:on cyclomatic.complexity
 }
 
 object MasterHAService {
@@ -115,7 +117,7 @@ object MasterHAService {
   case class DeleteMasterStateFailed(ex: Throwable) extends DeleteMasterStateResult
 
 
-  def props = Props(new MasterHAService)
+  def props: Props = Props(new MasterHAService)
 
   val MaxAppId = "maxAppId"
 }

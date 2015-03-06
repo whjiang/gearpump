@@ -238,6 +238,7 @@ class TaskActor(val taskContextData : TaskContextData, userConf : UserConfig, va
 
   def handleMessages = stashAndHandleMessages(handlNow = true)
 
+  //scalastyle:off cyclomatic.complexity
   def stashAndHandleMessages(handlNow: Boolean) : Receive = {
     case ackRequest : AckRequest =>
       //enqueue to handle the ackRequest and send back ack later
@@ -294,6 +295,7 @@ class TaskActor(val taskContextData : TaskContextData, userConf : UserConfig, va
     case other =>
       LOG.error("Failed! Received unknown message " + "taskId: " + taskId + ", " + other.toString)
   }
+  //scalastyle:on cyclomatic.complexity
 }
 
 object TaskActor {

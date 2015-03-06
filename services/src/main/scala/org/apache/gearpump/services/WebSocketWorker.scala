@@ -36,6 +36,7 @@ class WebSocketWorker(val serverConnection: ActorRef, val master: ActorRef) exte
 
   override def receive = handshaking orElse businessLogic orElse closeLogic
 
+  //scalastyle:off cyclomatic.complexity
   def businessLogic: Receive = {
     case x:TextFrame =>
       LOG.info(s"Got TextFrame ${x.payload.utf8String}")
@@ -74,6 +75,7 @@ class WebSocketWorker(val serverConnection: ActorRef, val master: ActorRef) exte
 
     case x: HttpRequest => // do something
   }
+  //scalastyle:on cyclomatic.complexity
 }
 
 object WebSocketWorker {

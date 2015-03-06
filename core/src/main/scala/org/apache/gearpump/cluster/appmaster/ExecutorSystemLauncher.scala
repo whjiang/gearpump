@@ -50,6 +50,7 @@ class ExecutorSystemLauncher (appId: Int, session: Session) extends Actor {
 
   def receive : Receive = waitForLaunchCommand
 
+  //scalastyle:off null
   def waitForLaunchCommand: Receive = {
     case LaunchExecutorSystem(worker, executorSystemId, resource) =>
       val launcherPath = ActorUtil.getFullPath(context.system, self.path)
@@ -63,6 +64,7 @@ class ExecutorSystemLauncher (appId: Int, session: Session) extends Actor {
       worker.ref ! launch
       context.become(waitForActorSystemToStart(sender, launch, worker))
   }
+  //scalastyle:on null
 
   def waitForActorSystemToStart(replyTo: ActorRef, launch: LaunchExecutor, worker: WorkerInfo) : Receive = {
     case RegisterActorSystem(systemPath) =>
@@ -97,6 +99,7 @@ object ExecutorSystemLauncher {
 
   case class LaunchExecutorSystemTimeout(session: Session)
 
+  //scalastyle:off null
   private def getExecutorJvmConfig(conf: ExecutorSystemJvmConfig, systemName: String,
       reportBack: String): ExecutorJVMConfig = {
     Option(conf).map { conf =>
@@ -105,4 +108,5 @@ object ExecutorSystemLauncher {
         Array(systemName, reportBack), jar, username, executorAkkaConfig)
     }.getOrElse(null)
   }
+  //scalastyle:on null
 }

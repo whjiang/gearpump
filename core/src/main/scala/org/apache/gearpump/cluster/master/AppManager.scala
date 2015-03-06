@@ -93,7 +93,7 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
     clientMsgHandler orElse appMasterMessage orElse selfMsgHandler orElse workerMessage orElse appDataStoreService orElse terminationWatch
   }
 
-  //scalastyle:off null
+  //scalastyle:off null cyclomatic.complexity
   def clientMsgHandler: Receive = {
     case SubmitApplication(app, jar, username) =>
       LOG.info(s"AppManager Submiting Application $appId...")
@@ -231,7 +231,7 @@ private[cluster] class AppManager(masterHA : ActorRef, kvService: ActorRef, laun
       }
 
   }
-  //scalastyle:off null
+  //scalastyle:on null cyclomatic.complexity
 
   def workerMessage: Receive = {
     case ShutdownExecutorSucceed(appId, executorId) =>

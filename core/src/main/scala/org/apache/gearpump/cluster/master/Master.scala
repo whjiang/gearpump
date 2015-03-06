@@ -98,6 +98,7 @@ private[cluster] class Master extends Actor with Stash {
       jarStore forward GetJarFileContainer
   }
 
+  //scalastyle:off cyclomatic.complexity
   def appMasterMsgHandler : Receive = {
     case  request : RequestResource =>
       scheduler forward request
@@ -137,6 +138,7 @@ private[cluster] class Master extends Actor with Stash {
     case invalidAppMaster: InvalidAppMaster =>
       appManager forward invalidAppMaster
   }
+  //scalastyle:on cyclomatic.complexity
 
   private def getMasterClusterList: List[HostPort] = {
     var cluster = systemConfig.getStringList(GEARPUMP_CLUSTER_MASTERS)
