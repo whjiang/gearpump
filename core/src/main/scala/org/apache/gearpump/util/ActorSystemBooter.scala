@@ -93,7 +93,7 @@ object ActorSystemBooter  {
 
     val username = Option(System.getProperty(Constants.GEARPUMP_USERNAME)).getOrElse("not_defined")
     LOG.info(s"RegisterActorSystem to ${reportBack}, current user: $username")
-    
+
     val reportBackActor = context.actorSelection(reportBack)
     reportBackActor ! RegisterActorSystem(ActorUtil.getSystemAddress(context.system).toString)
 
