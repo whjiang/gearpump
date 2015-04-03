@@ -22,7 +22,7 @@ import org.apache.gearpump.cluster.UserConfig
 import org.apache.gearpump.cluster.client.ClientContext
 import org.apache.gearpump.cluster.main.{ArgumentsParser, CLIOption, ParseResult}
 import org.apache.gearpump.partitioner.HashPartitioner
-import org.apache.gearpump.streaming.{AppDescription, ProcessorDescription}
+import org.apache.gearpump.streaming.{StreamApplication, Processor}
 import org.apache.gearpump.util.Graph._
 import org.apache.gearpump.util.{Graph, LogUtil}
 import org.slf4j.Logger
@@ -37,20 +37,20 @@ object WordCount extends App with ArgumentsParser {
     "sum" -> CLIOption[Int]("<how many sum tasks>", required = false, defaultValue = Some(1))
   )
 
-  def application(config: ParseResult) : AppDescription = {
+  def application(context: ClientContext, config: ParseResult) : StreamApplication = {
     val splitNum = config.getInt("split")
     val sumNum = config.getInt("sum")
     val partitioner = new HashPartitioner()
-    val split = ProcessorDescription(classOf[Split].getName, splitNum)
-    val sum = ProcessorDescription(classOf[Sum].getName, sumNum)
-    val app = AppDescription("wordCount", UserConfig.empty, Graph(split ~ partitioner ~> sum))
+    val split = Processor[Split](splitNum)
+    val sum = Processor[Sum](sumNum)
+    val app = StreamApplication(context, "wordCount", UserConfig.empty, Graph(split ~ partitioner ~> sum))
     app
   }
 
   val config = parse(args)
   val context = ClientContext(config.getString("master"))
   implicit val system = context.system
-  val appId = context.submit(application(config))
+  val appId = context.submit(application(context, config))
   context.close()
 }
 

@@ -35,7 +35,27 @@ import com.typesafe.config.Config
  *  use ClusterConfigSource(filePath) to construct the object, while filePath points to the .conf file.
  */
 
-case class Application(val name : String, val appMaster : String, val userConfig: UserConfig, val clusterConfig: ClusterConfigSource = null)
+case class AppDescription(val name : String, val appMaster : String, val userConfig: UserConfig, val clusterConfig: ClusterConfigSource = null)
+
+trait Application {
+  def name : String
+  def appMaster : String
+  def userConfig: UserConfig
+  def clusterConfig: ClusterConfigSource
+}
+
+object Application {
+  def apply(nameArg : String, appMasterArg : String, userConfigArg: UserConfig, clusterConfigArg: ClusterConfigSource = null) = new Application {
+    override def clusterConfig: ClusterConfigSource = clusterConfigArg
+    override def name: String = nameArg
+    override def userConfig: UserConfig = userConfigArg
+    override def appMaster: String = appMasterArg
+  }
+
+  implicit def application2AppDescription(app: Application): AppDescription = {
+    AppDescription(app.name, app.appMaster, app.userConfig, app.clusterConfig)
+  }
+}
 
 /**
  * Used for verification. All AppMaster must extend this interface

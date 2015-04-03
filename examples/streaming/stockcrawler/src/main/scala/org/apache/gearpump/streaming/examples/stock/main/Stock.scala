@@ -26,7 +26,7 @@ import org.apache.gearpump.cluster.main.{ArgumentsParser, CLIOption, ParseResult
 import org.apache.gearpump.partitioner.HashPartitioner
 import org.apache.gearpump.streaming.examples.stock.StockMarket.ServiceHour
 import org.apache.gearpump.streaming.examples.stock._
-import org.apache.gearpump.streaming.{AppDescription, ProcessorDescription}
+import org.apache.gearpump.streaming.{StreamApplication, Processor}
 import org.apache.gearpump.transport.HostPort
 import org.apache.gearpump.util.Graph._
 import org.apache.gearpump.util.{Graph, LogUtil}
@@ -42,10 +42,10 @@ object Stock extends App with ArgumentsParser {
     "analyzer"-> CLIOption[Int]("<parallism of analyzer>", required = false, defaultValue = Some(1)),
     "proxy" -> CLIOption[String]("proxy setting host:port, for example: 127.0.0.1:8443", required = false, defaultValue = Some("")))
 
-  def crawler(config: ParseResult)(implicit system: ActorSystem) : AppDescription = {
-    val crawler = ProcessorDescription(classOf[Crawler].getName, config.getInt("crawler"))
-    val analyzer = ProcessorDescription(classOf[Analyzer].getName, config.getInt("analyzer"))
-    val queryServer = ProcessorDescription(classOf[QueryServer].getName, 1)
+  def crawler(context: ClientContext, config: ParseResult)(implicit system: ActorSystem) : StreamApplication = {
+    val crawler = Processor[Crawler](config.getInt("crawler"))
+    val analyzer = Processor[Analyzer](config.getInt("analyzer"))
+    val queryServer = Processor[QueryServer](1)
     val partitioner = new HashPartitioner
 
     val proxySetting = config.getString("proxy")
@@ -57,7 +57,7 @@ object Stock extends App with ArgumentsParser {
 
     val userConfig = UserConfig.empty.withValue("StockId", stocks).withValue[StockMarket](classOf[StockMarket].getName, stockMarket)
 
-    val app = AppDescription("stock_direct_analyzer", userConfig,
+    val app = StreamApplication(context, "stock_direct_analyzer", userConfig,
       Graph(crawler ~ partitioner ~> analyzer, queryServer))
     app
   }
@@ -67,7 +67,7 @@ object Stock extends App with ArgumentsParser {
   
   implicit val system = context.system
 
-  val app = crawler(config)
+  val app = crawler(context, config)
   val appId = context.submit(app)
   context.close()
 }

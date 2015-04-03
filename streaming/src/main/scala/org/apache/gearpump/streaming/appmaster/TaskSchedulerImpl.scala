@@ -20,7 +20,7 @@ package org.apache.gearpump.streaming.appmaster
 import com.typesafe.config.Config
 import org.apache.gearpump.cluster.scheduler.{Relaxation, Resource, ResourceRequest}
 import org.apache.gearpump.streaming.appmaster.TaskLocator.{WorkerLocality, NonLocality, Locality}
-import org.apache.gearpump.streaming.{DAG, ProcessorDescription}
+import org.apache.gearpump.streaming.{ProcessorDescription, DAG, Processor}
 import org.apache.gearpump.streaming.appmaster.TaskSchedulerImpl.TaskLaunchData
 import org.apache.gearpump.streaming.task.{Subscriber, Subscriber$, TaskId}
 import org.apache.gearpump.util.LogUtil

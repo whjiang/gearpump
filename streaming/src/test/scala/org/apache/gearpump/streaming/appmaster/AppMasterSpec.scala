@@ -29,10 +29,10 @@ import org.apache.gearpump.cluster._
 import org.apache.gearpump.cluster.appmaster.AppMasterRuntimeEnvironment
 import org.apache.gearpump.cluster.master.{AppMasterRuntimeInfo, MasterProxy}
 import org.apache.gearpump.cluster.scheduler.{Relaxation, Resource, ResourceAllocation, ResourceRequest}
-import org.apache.gearpump.partitioner.HashPartitioner
+import org.apache.gearpump.partitioner.{Partitioner, HashPartitioner}
 import org.apache.gearpump.streaming.ExecutorToAppMaster.RegisterTask
+import org.apache.gearpump.streaming.{StreamApplication, Processor}
 import org.apache.gearpump.streaming.task._
-import org.apache.gearpump.streaming.{AppDescription, ProcessorDescription}
 import org.apache.gearpump.util.ActorSystemBooter.RegisterActorSystem
 import org.apache.gearpump.util.Graph._
 import org.apache.gearpump.util.{ActorUtil, Graph}
@@ -49,8 +49,8 @@ class AppMasterSpec extends WordSpec with Matchers with BeforeAndAfterEach with 
   val appId = 0
   val workerId = 1
   val resource = Resource(1)
-  val taskDescription1 = ProcessorDescription(classOf[TaskA].getName, 2)
-  val taskDescription2 = ProcessorDescription(classOf[TaskB].getName, 2)
+  val taskDescription1 = Processor[TaskA](2)
+  val taskDescription2 = Processor[TaskB](2)
   var conf: UserConfig = null
 
   var mockTask: TestProbe = null
@@ -59,7 +59,7 @@ class AppMasterSpec extends WordSpec with Matchers with BeforeAndAfterEach with 
   var mockMasterProxy: ActorRef = null
 
   var mockWorker: TestProbe = null
-  var appDescription: Application = null
+  var appDescription: AppDescription = null
   var appMasterContext: AppMasterContext = null
   var appMasterRuntimeInfo: AppMasterRuntimeInfo = null
 
@@ -76,7 +76,8 @@ class AppMasterSpec extends WordSpec with Matchers with BeforeAndAfterEach with 
     implicit val system = getActorSystem
     conf = UserConfig.empty.withValue(AppMasterSpec.MASTER, mockMaster.ref)
     appMasterContext = AppMasterContext(appId, "test", resource, None, mockMaster.ref, appMasterRuntimeInfo)
-    appDescription = AppDescription("test", conf, Graph(taskDescription1 ~ new HashPartitioner() ~> taskDescription2))
+    val dag = Graph[Processor, Partitioner](taskDescription1 ~ (new HashPartitioner()) ~> taskDescription2)
+    appDescription = StreamApplication(system, "test", conf, dag , null)
 
     mockMasterProxy = getActorSystem.actorOf(
       Props(new MasterProxy(List(mockMaster.ref.path))), AppMasterSpec.MOCK_MASTER_PROXY)

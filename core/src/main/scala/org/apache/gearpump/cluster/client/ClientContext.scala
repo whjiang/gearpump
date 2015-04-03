@@ -61,7 +61,7 @@ class ClientContext(masters: Iterable[HostPort]) {
   def submit(app : Application, jarPath: String) : Int = {
     val client = new MasterClient(master)
     val appName = checkAndAddNamePrefix(app.name, System.getProperty(GEARPUMP_APP_NAME_PREFIX))
-    val updatedApp = Application(appName, app.appMaster, app.userConfig, app.clusterConfig)
+    val updatedApp = AppDescription(appName, app.appMaster, app.userConfig, app.clusterConfig)
     if (jarPath == null) {
       client.submitApplication(updatedApp, None)
     } else {

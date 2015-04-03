@@ -21,7 +21,7 @@ import org.apache.gearpump.cluster.UserConfig
 import org.apache.gearpump.cluster.client.ClientContext
 import org.apache.gearpump.cluster.main.{ArgumentsParser, CLIOption, ParseResult}
 import org.apache.gearpump.partitioner.ShufflePartitioner
-import org.apache.gearpump.streaming.{AppDescription, ProcessorDescription}
+import org.apache.gearpump.streaming.{StreamApplication, Processor}
 import org.apache.gearpump.util.Graph._
 import org.apache.gearpump.util.HadoopConfig._
 import org.apache.gearpump.util.{Graph, LogUtil}
@@ -39,7 +39,7 @@ object SequenceFileIO extends App with ArgumentsParser {
     "output"-> CLIOption[String]("<output file directory>", required = true)
   )
 
-  def application(config: ParseResult) : AppDescription = {
+  def application(clientContext: ClientContext, config: ParseResult) : StreamApplication = {
     val spoutNum = config.getInt("source")
     val boltNum = config.getInt("sink")
     val input = config.getString("input")
@@ -47,10 +47,10 @@ object SequenceFileIO extends App with ArgumentsParser {
     val appConfig = UserConfig.empty.withString(SeqFileStreamProducer.INPUT_PATH, input).withString(SeqFileStreamProcessor.OUTPUT_PATH, output)
     val hadoopConfig = appConfig.withHadoopConf(new Configuration())
     val partitioner = new ShufflePartitioner()
-    val streamProducer = ProcessorDescription(classOf[SeqFileStreamProducer].getName, spoutNum)
-    val streamProcessor = ProcessorDescription(classOf[SeqFileStreamProcessor].getName, boltNum)
+    val streamProducer = Processor[SeqFileStreamProducer](spoutNum)
+    val streamProcessor = Processor[SeqFileStreamProcessor](boltNum)
 
-    val app = AppDescription("SequenceFileIO", hadoopConfig, Graph(streamProducer ~ partitioner ~> streamProcessor))
+    val app = StreamApplication(clientContext, "SequenceFileIO", hadoopConfig, Graph(streamProducer ~ partitioner ~> streamProcessor))
     app
   }
 
@@ -58,6 +58,6 @@ object SequenceFileIO extends App with ArgumentsParser {
   val context = ClientContext(config.getString("master"))
   implicit val system = context.system
 
-  val appId = context.submit(application(config))
+  val appId = context.submit(application(context, config))
   context.close()
 }
