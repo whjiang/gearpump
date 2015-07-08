@@ -22,46 +22,64 @@ import com.typesafe.config.ConfigFactory
 import org.apache.gearpump.cluster.UserConfig
 import org.apache.gearpump.cluster.client.ClientContext
 import org.apache.gearpump.cluster.main.{ArgumentsParser, CLIOption, ParseResult}
-import org.apache.gearpump.external.hbase.{HBaseRepo, HBaseSinkInterface, HBaseSink}
+import org.apache.gearpump.external.hbase.{HBaseDataSink, HBaseRepo, HBaseSinkInterface, HBaseSink}
 import org.apache.gearpump.external.hbase.HBaseSink._
 import org.apache.gearpump.partitioner.HashPartitioner
+import org.apache.gearpump.streaming.kafka.KafkaSource
 import org.apache.gearpump.streaming.kafka.lib.KafkaConfig
+import org.apache.gearpump.streaming.sink.DataSinkProcessor
+import org.apache.gearpump.streaming.source.DataSourceProcessor
 import org.apache.gearpump.streaming.{Processor, StreamApplication}
 import org.apache.gearpump.util.Graph._
 import org.apache.gearpump.util.{Graph, LogUtil}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hbase.HBaseConfiguration
 import org.slf4j.Logger
 
 object PipeLine extends App with ArgumentsParser {
   private val LOG: Logger = LogUtil.getLogger(getClass)
   val PROCESSORS = "pipeline.processors"
   val PERSISTORS = "pipeline.persistors"
+  val HBASE_COLUMN_FAMILY = "family"
+  val HBASE_COLUMN_NAME = "c1"
 
   override val options: Array[(String, CLIOption[Any])] = Array(
-    "conf" -> CLIOption[String]("<conf file>", required = true)
+    "kafka_zookeepers" -> CLIOption[String]("Kafka zookeeper list", required = true),
+    "kafka_topics" -> CLIOption[String]("Kafka topics to read", required = true),
+    "kafka_parallelism" -> CLIOption[Int]("Kafka read parallelism", required = false, Some(1)),
+    "hbase_table" -> CLIOption[String]("HBase table to write", required = true),
+    "hbase_parallelism" -> CLIOption[Int]("Kafka write parallelism", required = false, Some(1)),
+    "processor_parallelism" -> CLIOption[Int]("processing parallelism", required = false, Some(1))
   )
 
   def application(config: ParseResult): StreamApplication = {
     import Messages._
-    val pipeLinePath = config.getString("conf")
-    val pipelineConfig = PipeLineConfig(ConfigFactory.parseFile(new java.io.File(pipeLinePath)))
-    val processors = pipelineConfig.config.getInt(PROCESSORS)
-    val persistors = pipelineConfig.config.getInt(PERSISTORS)
-    val kafkaConfig = new KafkaConfig(pipelineConfig.config)
-    val repo = new HBaseRepo {
-      def getHBase(table: String, conf: Configuration): HBaseSinkInterface = HBaseSink(table, conf)
-    }
-    val appConfig = UserConfig.empty.withValue(KafkaConfig.NAME, kafkaConfig).withValue(PIPELINE, pipelineConfig).withValue(HBASESINK, repo)
+    val kafkaZks = config.getString("kafka_zookeepers")
+    val kafkaTopic = config.getString("kafka_topics")
+    val hbaseTable = config.getString("hbase_table")
+    val kafkaParallelism = config.getInt("kafka_parallelism")
+    val hbaseParallelism = config.getInt("hbase_parallelism")
+    val processorParallelism = config.getInt("processor_parallelism")
 
-    val kafka = Processor[KafkaProducer](1, "KafkaProducer")
-    val cpuProcessor = Processor[CpuProcessor](processors, "CpuProcessor")
-    val memoryProcessor = Processor[MemoryProcessor](processors, "MemoryProcessor")
-    val cpuPersistor = Processor[CpuPersistor](persistors, "CpuPersistor")
-    val memoryPersistor = Processor[MemoryPersistor](persistors, "MemoryPersistor")
+    //create data source
+    val kafkaSource = new KafkaSource(kafkaTopic, kafkaZks)
+    val sourceProcessor = DataSourceProcessor(kafkaSource, kafkaParallelism, "kafkaSource")
+
+    //create data sink
+    val hbaseConf = HBaseConfiguration.create()
+    val hbaseSink = new HBaseDataSink(hbaseConf, hbaseTable)
+    val sinkProcessor = DataSinkProcessor(hbaseSink, hbaseParallelism, "hbaseSink")
+
+    //create app logic
+    val decodeProcessor = Processor[DecodeProcessor](processorParallelism, "CpuProcessor")
+    val cpuProcessor = Processor[CpuProcessor](processorParallelism, "CpuProcessor")
+    val memoryProcessor = Processor[MemoryProcessor](processorParallelism, "MemoryProcessor")
+
     val app = StreamApplication("PipeLine", Graph(
-      kafka ~> cpuProcessor ~> cpuPersistor,
-      kafka ~> memoryProcessor ~> memoryPersistor
-    ), appConfig)
+        sourceProcessor ~> decodeProcessor,
+        decodeProcessor ~> cpuProcessor ~> sinkProcessor,
+        decodeProcessor ~> memoryProcessor ~> sinkProcessor
+    ), UserConfig.empty)
     app
   }
 
@@ -70,5 +88,4 @@ object PipeLine extends App with ArgumentsParser {
   implicit val system = context.system
   val appId = context.submit(application(config))
   context.close()
-
 }
