@@ -17,7 +17,7 @@
  */
 package io.gearpump.jarstore
 
-import java.io.File
+import java.io.{InputStream, OutputStream, File}
 import java.net.URI
 import java.util.ServiceLoader
 
@@ -29,26 +29,36 @@ import scala.collection.JavaConverters._
 
 case class FilePath(path: String)
 
+case class RemoteFileInfo(fileName: String, outputStream: OutputStream)
+
 trait JarStoreService {
   /**
     * The scheme of the JarStoreService.
    */
   val scheme : String
 
-  def init(config: Config, system: ActorSystem)
+  /** Initialize this jar store service
+    * @param config Configuration
+    * @param system Actor system
+    * @param jarStoreRootPath  the absolute path for a jar store */
+  def init(config: Config, system: ActorSystem, jarStoreRootPath: String)
 
   /**
-    * This function will copy the local file to the remote JarStore, called from client side.
-   * @param localFile The local file
-   */
-  def copyFromLocal(localFile: File): FilePath
+   * This function will create an OutputStream so that Master can use to upload the client side file to jar store.
+   * Master is responsible for close this OutputStream when upload done.
+   * the file may be renamed by jar store, the new name is returned as part of result
+   * @param appId            the application ID this file belongs to
+   * @param fileName   the file name to write
+   * @return  the pair (renamed file name, output stream for write)
+   * */
+  def createFileForWrite(appId: Int, fileName : String): RemoteFileInfo
 
   /**
-    * This function will copy the remote file to local file system, called from client side.
-   * @param localFile The destination of file path
-   * @param remotePath The remote file path from JarStore
-   */
-  def copyToLocalFile(localFile: File, remotePath: FilePath)
+   * This function will create an InputStream so that the file in jar store can be read
+   * @param appId      the application ID this file belongs to
+   * @param remoteFileName the file name in jar store
+   * */
+  def getInputStream(appId: Int, remoteFileName: String): InputStream
 }
 
 object JarStoreService {

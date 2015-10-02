@@ -17,54 +17,69 @@
  */
 package io.gearpump.jarstore.dfs
 
-import java.io.File
-import akka.actor.{ActorSystem, ActorRefFactory}
+import java.io.InputStream
+import akka.actor.ActorSystem
 import com.typesafe.config.Config
-import org.apache.hadoop.fs.Path
-import io.gearpump.jarstore.{FilePath, JarStoreService}
+import org.apache.hadoop.fs.{FileSystem, Path}
+import io.gearpump.jarstore.{RemoteFileInfo, FilePath, JarStoreService}
 import io.gearpump.util.LogUtil
 import org.apache.hadoop.conf.Configuration
-import io.gearpump.util.Constants
 import org.apache.hadoop.fs.permission.{FsAction, FsPermission}
 import org.slf4j.Logger
 
 class DFSJarStoreService extends JarStoreService {
   private val LOG: Logger = LogUtil.getLogger(getClass)
-  private var rootPath: Path = null
-
+  var rootPath : Path = null
   override val scheme: String = "hdfs"
+  var fs : FileSystem = null
+  val random = new java.util.Random()
 
-  override def init(config: Config, actorRefFactory: ActorSystem): Unit = {
-    rootPath = new Path(config.getString(Constants.GEARPUMP_APP_JAR_STORE_ROOT_PATH))
-    val fs = rootPath.getFileSystem(new Configuration())
-    if (!fs.exists(rootPath)) {
-      fs.mkdirs(rootPath, new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.ALL))
+
+  /** Initialize this jar store service
+    * @param config Configuration
+    * @param system Actor system
+    * @param jarStoreRootPath  the absolute path for a jar store */
+  override def init(config: Config, system: ActorSystem, jarStoreRootPath: String): Unit = {
+    rootPath = new Path(jarStoreRootPath)
+    fs = rootPath.getFileSystem(new Configuration())
+    createDir(rootPath)
+  }
+
+  private def createDir(dirPath: Path) = {
+    if (!fs.exists(dirPath)) {
+      fs.mkdirs(dirPath, new FsPermission(FsAction.ALL, FsAction.ALL, FsAction.ALL))
     }
   }
 
   /**
-    * This function will copy the remote file to local file system, called from client side.
-   * @param localFile The destination of file path
-   * @param remotePath The remote file path from JarStore
-   */
-  override def copyToLocalFile(localFile: File, remotePath: FilePath): Unit = {
-    LOG.info(s"Copying to local file: ${localFile.getAbsolutePath} from ${remotePath}")
-    val filePath = new Path(rootPath, remotePath.path)
-    val fs = filePath.getFileSystem(new Configuration())
-    val target = new Path(localFile.toURI().toString)
-    fs.copyToLocalFile(filePath, target)
+   * This function will create an OutputStream so that Master can use to upload the client side file to jar store.
+   * Master is responsible for close this OutputStream when upload done.
+   * the file may be renamed by jar store, the new name is returned as part of result
+   * @param appId            the application ID this file belongs to
+   * @param fileName   the file name to write
+   * @return  the pair (renamed file name, output stream for write)
+   **/
+  override def createFileForWrite(appId: Int, fileName: String): RemoteFileInfo = {
+    val randomInt = random.nextInt()
+    val renamedName = s"$fileName$randomInt"
+
+    val appDir = new Path(rootPath, s"app$appId")
+    createDir(appDir)
+
+    val filePath = new Path(appDir, renamedName)
+    val outputStream = fs.create(filePath)
+
+    RemoteFileInfo(renamedName, outputStream)
   }
 
   /**
-   * This function will copy the local file to the remote JarStore, called from client side.
-   * @param localFile The local file
-   */
-  override def copyFromLocal(localFile: File): FilePath = {
-    val remotePath = FilePath(Math.abs(new java.util.Random().nextLong()).toString)
-    LOG.info(s"Copying from local file: ${localFile.getAbsolutePath} to ${remotePath}")
-    val filePath = new Path(rootPath, remotePath.path)
-    val fs = filePath.getFileSystem(new Configuration())
-    fs.copyFromLocalFile(new Path(localFile.toURI.toString), filePath)
-    remotePath
+   * This function will create an InputStream so that the file in jar store can be read
+   * @param appId      the application ID this file belongs to
+   * @param remoteFileName the file name in jar store
+   **/
+  override def getInputStream(appId: Int, remoteFileName: String): InputStream = {
+    val appDir = new Path(rootPath, s"app$appId")
+    val filePath = new Path(appDir, remoteFileName)
+    fs.open(filePath)
   }
 }
