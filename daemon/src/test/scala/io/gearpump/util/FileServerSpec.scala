@@ -21,17 +21,14 @@ package io.gearpump.util
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{ActorSystem, Props}
-import akka.pattern.ask
+import akka.actor.ActorSystem
+import io.gearpump.cluster.TestUtil
 import io.gearpump.google.common.io.Files
-import io.gearpump.cluster.{ClusterConfig, TestUtil}
 import io.gearpump.jarstore.FilePath
-import io.gearpump.util.FileServer._
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 
+import scala.concurrent.Await
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
-import scala.util.Success
 
 class FileServerSpec  extends WordSpecLike with Matchers with BeforeAndAfterAll {
 

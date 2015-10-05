@@ -19,15 +19,13 @@
 package io.gearpump.util
 
 import java.io.File
-import java.net.URI
-import java.net.ServerSocket
+import java.net.{ServerSocket, URI}
+
 import com.typesafe.config.Config
-import io.gearpump.cluster.AppJar
-import io.gearpump.jarstore.{FilePath, JarStoreService}
 import io.gearpump.transport.HostPort
 
 import scala.concurrent.forkjoin.ThreadLocalRandom
-import scala.sys.process.{ProcessLogger, Process}
+import scala.sys.process.Process
 import scala.util.Try
 
 object Util {
@@ -101,11 +99,6 @@ object Util {
       socket.close;
       port
     }
-  }
-
-  def uploadJar(jarFile: File, jarStoreService: JarStoreService): AppJar = {
-    val remotePath = jarStoreService.copyFromLocal(jarFile)
-    AppJar(jarFile.getName, remotePath)
   }
 
   case class JvmSetting(vmargs : Array[String], classPath : Array[String])

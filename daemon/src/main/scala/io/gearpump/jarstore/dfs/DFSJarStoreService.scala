@@ -18,13 +18,14 @@
 package io.gearpump.jarstore.dfs
 
 import java.io.InputStream
+
 import akka.actor.ActorSystem
 import com.typesafe.config.Config
-import org.apache.hadoop.fs.{FileSystem, Path}
-import io.gearpump.jarstore.{RemoteFileInfo, FilePath, JarStoreService}
+import io.gearpump.jarstore.{JarStoreService, RemoteFileInfo}
 import io.gearpump.util.LogUtil
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.permission.{FsAction, FsPermission}
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.slf4j.Logger
 
 class DFSJarStoreService extends JarStoreService {
@@ -51,6 +52,15 @@ class DFSJarStoreService extends JarStoreService {
     }
   }
 
+
+  /** Clean up the jars for an application */
+  override def cleanup(appId: Int): Unit = {
+    val appDir = getAppDir(appId)
+    if (fs.exists(appDir)) {
+      fs.delete(appDir, true)
+    }
+  }
+
   /**
    * This function will create an OutputStream so that Master can use to upload the client side file to jar store.
    * Master is responsible for close this OutputStream when upload done.
@@ -63,7 +73,7 @@ class DFSJarStoreService extends JarStoreService {
     val randomInt = random.nextInt()
     val renamedName = s"$fileName$randomInt"
 
-    val appDir = new Path(rootPath, s"app$appId")
+    val appDir = getAppDir(appId)
     createDir(appDir)
 
     val filePath = new Path(appDir, renamedName)
@@ -78,8 +88,10 @@ class DFSJarStoreService extends JarStoreService {
    * @param remoteFileName the file name in jar store
    **/
   override def getInputStream(appId: Int, remoteFileName: String): InputStream = {
-    val appDir = new Path(rootPath, s"app$appId")
+    val appDir = getAppDir(appId)
     val filePath = new Path(appDir, remoteFileName)
     fs.open(filePath)
   }
+
+  private def getAppDir(appId: Int) : Path = new Path(rootPath, s"app$appId")
 }

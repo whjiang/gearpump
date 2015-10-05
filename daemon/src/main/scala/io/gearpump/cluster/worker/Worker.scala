@@ -24,25 +24,23 @@ import java.net.URL
 import java.util.concurrent.{Executors, TimeUnit}
 
 import akka.actor._
-import akka.pattern.pipe
+import akka.pattern.{ask, pipe}
 import com.typesafe.config.{Config, ConfigFactory}
-import io.gearpump.cluster.AppMasterToMaster.{WorkerData, GetWorkerData}
+import io.gearpump.cluster.AppMasterToMaster.{GetWorkerData, WorkerData}
 import io.gearpump.cluster.AppMasterToWorker._
-import io.gearpump.cluster.ClientToMaster.{QueryHistoryMetrics, QueryWorkerConfig}
-import io.gearpump.cluster.{ExecutorJVMConfig, ClusterConfig}
+import io.gearpump.cluster.ClientToMaster.{GetJarStoreServer, JarStoreServerAddress, QueryHistoryMetrics, QueryWorkerConfig}
 import io.gearpump.cluster.MasterToClient.WorkerConfig
 import io.gearpump.cluster.MasterToWorker._
 import io.gearpump.cluster.WorkerToAppMaster._
 import io.gearpump.cluster.WorkerToMaster._
 import io.gearpump.cluster.master.Master.MasterInfo
 import io.gearpump.cluster.scheduler.Resource
+import io.gearpump.cluster.{ClusterConfig, ExecutorJVMConfig}
 import io.gearpump.metrics.Metrics.ReportMetrics
 import io.gearpump.metrics.{JvmMetricsSet, Metrics, MetricsReporterService}
 import io.gearpump.util.Constants._
 import io.gearpump.util.HistoryMetricsService.HistoryMetricsConfig
 import io.gearpump.util.{Constants, TimeOutScheduler, _}
-import io.gearpump.jarstore.JarStoreService
-import io.gearpump.util._
 import org.slf4j.Logger
 
 import scala.concurrent.duration._
@@ -66,8 +64,6 @@ private[cluster] class Worker(masterProxy : ActorRef) extends Actor with TimeOut
   private val createdTime = System.currentTimeMillis()
   private var masterInfo: MasterInfo = null
   private var executorNameToActor = Map.empty[String, ActorRef]
-  private val jarStoreService = JarStoreService.get(systemConfig)
-  jarStoreService.init(systemConfig, context.system)
 
   private val ioPool = ExecutionContext.fromExecutorService(Executors.newCachedThreadPool())
 
@@ -141,7 +137,7 @@ private[cluster] class Worker(masterProxy : ActorRef) extends Actor with TimeOut
       } else {
         val actorName = ActorUtil.actorNameForExecutor(launch.appId, launch.executorId)
 
-        val executor = context.actorOf(Props(classOf[ExecutorWatcher], launch, masterInfo, ioPool, jarStoreService))
+        val executor = context.actorOf(Props(classOf[ExecutorWatcher], launch, masterInfo, ioPool))
         executorNameToActor += actorName ->executor
 
         resource = resource - launch.resource
@@ -271,7 +267,7 @@ private[cluster] object Worker {
 
   case class ExecutorResult(result : Try[Int])
 
-  class ExecutorWatcher(launch: LaunchExecutor, masterInfo: MasterInfo, ioPool: ExecutionContext, jarStoreService: JarStoreService) extends Actor {
+  class ExecutorWatcher(launch: LaunchExecutor, masterInfo: MasterInfo, ioPool: ExecutionContext) extends Actor {
 
     val config = context.system.settings.config
     private val LOG: Logger = LogUtil.getLogger(getClass, app = launch.appId, executor = launch.executorId)
@@ -301,14 +297,20 @@ private[cluster] object Worker {
 
     private def createProcess(ctx: ExecutorJVMConfig): ExecutorHandler = {
 
-      val process = Future {
-        val jarPath = ctx.jar.map { appJar =>
+      val jarPath: Future[Option[String]] = if(ctx.jar.isDefined) {
+        val appJar = ctx.jar.get
+        implicit val timeout = Constants.FUTURE_TIMEOUT
+        (masterInfo.master ? GetJarStoreServer).asInstanceOf[Future[JarStoreServerAddress]].map { address =>
+          val fsClient = new FileServerClient(context.system, address.url)
           val tempFile = File.createTempFile(appJar.name, ".jar")
-          jarStoreService.copyToLocalFile(tempFile, appJar.filePath)
-          val file = new URL("file:" + tempFile)
-          file.getFile
-        }
+          fsClient.download(launch.appId, appJar.filePath, tempFile)
 
+          val file = new URL("file:" + tempFile)
+          Some(file.getFile)
+        }
+      }else Future.successful(None)
+
+      val process = jarPath.map { jar: Option[String] =>
         val configFile = Option(ctx.executorAkkaConfig).filterNot(_.isEmpty).map { conf =>
           val configFile = File.createTempFile("gearpump", ".conf")
           ClusterConfig.saveConfig(conf, configFile)
@@ -318,7 +320,7 @@ private[cluster] object Worker {
 
         val classPath = filterDaemonLib(Util.getCurrentClassPath) ++
           ctx.classPath.map(path => expandEnviroment(path)) ++
-          jarPath.map(Array(_)).getOrElse(Array.empty[String])
+          jar.map(Array(_)).getOrElse(Array.empty[String])
 
 
         val appLogDir = context.system.settings.config.getString(Constants.GEARPUMP_LOG_APPLICATION_DIR)
@@ -372,7 +374,7 @@ private[cluster] object Worker {
         LOG.info(s"Launch executor, classpath: ${classPath.mkString(File.pathSeparator)}")
         val process = Util.startProcess(options, classPath, ctx.mainClass, ctx.arguments)
 
-        ProcessInfo(process, jarPath, configFile)
+        ProcessInfo(process, jar, configFile)
       }
 
       new ExecutorHandler {

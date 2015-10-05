@@ -18,20 +18,12 @@
 package io.gearpump.jarstore.local
 
 import java.io._
-import java.util.concurrent.TimeUnit
 
-import akka.pattern.ask
-import akka.actor.{ActorRef, ActorSystem, ActorRefFactory}
-import io.gearpump.cluster.ClientToMaster.{JarStoreServerAddress, GetJarStoreServer}
-import io.gearpump.cluster.master.MasterProxy
+import akka.actor.ActorSystem
 import com.typesafe.config.Config
-import io.gearpump.jarstore.{RemoteFileInfo, FilePath, JarStoreService}
+import io.gearpump.jarstore.{JarStoreService, RemoteFileInfo}
 import io.gearpump.util._
-import scala.collection.JavaConversions._
 import org.slf4j.Logger
-
-import scala.concurrent.duration.Duration
-import scala.concurrent.{ExecutionContext, Await, Future}
 
 class LocalJarStoreService extends JarStoreService{
   private def LOG: Logger = LogUtil.getLogger(getClass)
@@ -58,6 +50,14 @@ class LocalJarStoreService extends JarStoreService{
     }
   }
 
+
+  /** Clean up the jars for an application */
+  override def cleanup(appId: Int): Unit = {
+    val appDir = getAppDir(appId)
+    val dirFile = new File(appDir)
+    org.apache.commons.io.FileUtils.deleteDirectory(dirFile)
+  }
+
   /**
    * This function will create an OutputStream so that Master can use to upload the client side file to jar store.
    * Master is responsible for close this OutputStream when upload done.
@@ -69,7 +69,7 @@ class LocalJarStoreService extends JarStoreService{
   override def createFileForWrite(appId: Int, fileName: String): RemoteFileInfo = {
     val randomInt = random.nextInt()
     val renamedName = s"$fileName$randomInt"
-    val appDir = s"${rootPath.get}/app$appId"
+    val appDir = getAppDir(appId)
     createDir(appDir)
 
     val fullPath = s"$appDir/$renamedName"
@@ -86,46 +86,12 @@ class LocalJarStoreService extends JarStoreService{
    * @param remoteFileName the file name in jar store
    **/
   override def getInputStream(appId: Int, remoteFileName: String): InputStream = {
-    val fullPath = s"${rootPath.get}/app$appId/$remoteFileName"
+    val appDir = getAppDir(appId)
+    val fullPath = s"$appDir/$remoteFileName"
     new BufferedInputStream(new FileInputStream(fullPath))
   }
 
-
-
-  private implicit val timeout = Constants.FUTURE_TIMEOUT
-  private var system : akka.actor.ActorSystem = null
-  private var master : ActorRef = null
-  private implicit def dispatcher: ExecutionContext = system.dispatcher
-
-  def init(config: Config, system: ActorSystem): Unit = {
-    this.system = system
-    val masters = config.getStringList(Constants.GEARPUMP_CLUSTER_MASTERS).toList.flatMap(Util.parseHostList)
-    master = system.actorOf(MasterProxy.props(masters), s"masterproxy${Util.randInt}")
-  }
-
-  private lazy val client = (master ? GetJarStoreServer).asInstanceOf[Future[JarStoreServerAddress]].map { address =>
-    val client = new FileServer.Client(system, address.url)
-    client
-  }
-
-
-  /**
-   * This function will copy the remote file to local file system, called from client side.
-   * @param localFile The destination of file path
-   * @param remotePath The remote file path from JarStore
-   */
-  def copyToLocalFile(localFile: File, remotePath: FilePath): Unit = {
-    LOG.info(s"Copying to local file: ${localFile.getAbsolutePath} from $remotePath")
-    val future = client.flatMap(_.download(remotePath, localFile))
-    Await.ready(future, Duration(60, TimeUnit.SECONDS))
-  }
-
-  /**
-   * This function will copy the local file to the remote JarStore, called from client side.
-   * @param localFile The local file
-   */
-  def copyFromLocal(localFile: File): FilePath = {
-    val future = client.flatMap(_.upload(localFile))
-    Await.result(future, Duration(60, TimeUnit.SECONDS))
+  private def getAppDir(appId: Int) : String = {
+    s"${rootPath.get}/app$appId"
   }
 }

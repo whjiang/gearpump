@@ -22,7 +22,7 @@ import akka.actor.ActorRef
 import akka.pattern.ask
 import io.gearpump.cluster.ClientToMaster._
 import io.gearpump.cluster.MasterToAppMaster.{AppMastersData, AppMastersDataRequest, ReplayFromTimestampWindowTrailingEdge}
-import io.gearpump.cluster.MasterToClient.{ReplayApplicationResult, ResolveAppIdResult, ShutdownApplicationResult, SubmitApplicationResult}
+import io.gearpump.cluster.MasterToClient._
 import io.gearpump.cluster.{AppJar, AppDescription}
 import io.gearpump.util.{ActorUtil, Constants}
 
@@ -36,15 +36,26 @@ import scala.util.{Failure, Success}
 class MasterClient(master : ActorRef) {
   implicit val timeout = Constants.FUTURE_TIMEOUT
 
-  def submitApplication(app : AppDescription, appJar: Option[AppJar]) : Int = {
-    val result = Await.result( (master ? SubmitApplication(app, appJar)).asInstanceOf[Future[SubmitApplicationResult]], Duration.Inf)
+  def allocateApplicationId(app : AppDescription) : Int = {
+    val result = Await.result( (master ? AllocateApplicationId(app)).asInstanceOf[Future[AllocateApplicationIdResult]], Duration.Inf)
     val appId = result.appId match {
       case Success(appId) =>
-        Console.println(s"Submit application succeed. The application id is $appId")
+        Console.println(s"Allocate application ID succeed. The application id is $appId")
         appId
       case Failure(ex) => throw ex
     }
     appId
+  }
+
+  def submitApplication(appId: Int, appJar: Option[AppJar]) = {
+    val result = Await.result((master ? SubmitApplication(appId, appJar)).
+                  asInstanceOf[Future[SubmitApplicationResult]], Duration.Inf)
+    result.appId match {
+      case Success(id) =>
+        if(appId!=id)
+          throw new Exception(s"The application id returned from application manager differs from previous return.")
+      case Failure(ex) => throw ex
+    }
   }
 
   def resolveAppId(appId: Int): ActorRef = {

@@ -18,14 +18,14 @@
 package io.gearpump.experiments.distributeservice
 
 import java.io.File
-import org.apache.commons.io.FileUtils
-import io.gearpump.cluster.client.ClientContext
-import io.gearpump.cluster.main.{CLIOption, ArgumentsParser}
-import DistServiceAppMaster.{InstallService, FileContainer, GetFileContainer}
-import io.gearpump.util.{AkkaApp, LogUtil, FileServer, Constants}
-import org.slf4j.{LoggerFactory, Logger}
 
 import akka.pattern.ask
+import io.gearpump.cluster.client.ClientContext
+import io.gearpump.cluster.main.{ArgumentsParser, CLIOption}
+import io.gearpump.experiments.distributeservice.DistServiceAppMaster.{FileContainer, GetFileContainer, InstallService}
+import io.gearpump.util.{AkkaApp, Constants}
+import org.apache.commons.io.FileUtils
+
 import scala.concurrent.Future
 import scala.util.{Failure, Success}
 

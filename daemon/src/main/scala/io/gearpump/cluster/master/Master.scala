@@ -32,7 +32,6 @@ import io.gearpump.cluster.WorkerToMaster._
 import io.gearpump.cluster.master.InMemoryKVService.{GetKV, GetKVFailed, GetKVSuccess, PutKV}
 import io.gearpump.cluster.master.Master.{MasterInfo, WorkerTerminated, _}
 import io.gearpump.cluster.scheduler.Scheduler.ApplicationFinished
-import io.gearpump.jarstore.local.LocalJarStore
 import io.gearpump.metrics.Metrics.ReportMetrics
 import io.gearpump.metrics.{JvmMetricsSet, Metrics, MetricsReporterService}
 import io.gearpump.transport.HostPort
@@ -72,11 +71,7 @@ private[cluster] class Master extends Actor with Stash {
 
   val jarStoreRootPath = systemConfig.getString(Constants.GEARPUMP_APP_JAR_STORE_ROOT_PATH)
 
-  val jarStore = if(Util.isLocalPath(jarStoreRootPath)) {
-    Some(context.actorOf(Props(classOf[LocalJarStore], jarStoreRootPath)))
-  } else{
-    None
-  }
+  val jarStoreServer = context.actorOf(Props(classOf[JarStoreServer]))
 
   private val hostPort = HostPort(ActorUtil.getSystemAddress(context.system).hostPort)
 
@@ -141,7 +136,7 @@ private[cluster] class Master extends Actor with Stash {
 
   def jarStoreService : Receive = {
     case GetJarStoreServer =>
-      jarStore.foreach(_ forward GetJarStoreServer)
+      jarStoreServer forward GetJarStoreServer
   }
 
   def metricsService : Receive = {

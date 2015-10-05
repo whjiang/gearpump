@@ -34,7 +34,9 @@ import scala.util.Try
  */
 
 object ClientToMaster {
-  case class SubmitApplication(appDescription: AppDescription, appJar: Option[AppJar], username : String = System.getProperty("user.name"))
+  case class AllocateApplicationId(appDescription: AppDescription, username : String = System.getProperty("user.name"))
+  case class SubmitApplication(appId: Int, appJar: Option[AppJar])
+
   case class RestartApplication(appId: Int)
   case class ShutdownApplication(appId: Int)
   case class ResolveAppId(appId: Int)
@@ -59,6 +61,7 @@ object ClientToMaster {
 }
 
 object MasterToClient {
+  case class AllocateApplicationIdResult(appId: Try[Int])
   case class SubmitApplicationResult(appId : Try[Int])
   case class SubmitApplicationResultValue(appId: Int)
   case class ShutdownApplicationResult(appId : Try[Int])

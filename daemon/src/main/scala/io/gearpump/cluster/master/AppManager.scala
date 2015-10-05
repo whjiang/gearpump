@@ -20,6 +20,7 @@ package io.gearpump.cluster.master
 
 import akka.actor._
 import akka.pattern.ask
+import io.gearpump.cluster.AppDescription
 import io.gearpump.cluster.AppMasterToMaster.{AppDataSaved, SaveAppDataFailed, _}
 import io.gearpump.cluster.AppMasterToWorker._
 import io.gearpump.cluster.ClientToMaster._
@@ -62,6 +63,8 @@ private[cluster] class AppManager(kvService: ActorRef, launcher: AppMasterLaunch
 
   private var appMasterRestartPolicies = Map.empty[Int, RestartPolicy]
 
+  private var tempAppSubmissionRegistry = Map.empty[Int, (AppDescription, String)]
+
   def receive: Receive = null
 
   kvService ! GetKV(MASTER_GROUP, MASTER_STATE)
@@ -93,28 +96,43 @@ private[cluster] class AppManager(kvService: ActorRef, launcher: AppMasterLaunch
   }
 
   def clientMsgHandler: Receive = {
-    case SubmitApplication(app, jar, username) =>
-      LOG.info(s"Submit Application ${app.name}($appId) by $username...")
+    case AllocateApplicationId(app, username) => {
+      LOG.info(s"Allocate id ($appId) for application ${app.name} by $username...")
       val client = sender
       if (applicationNameExist(app.name)) {
-        client ! SubmitApplicationResult(Failure(new Exception(s"Application name ${app.name} already existed")))
+        client ! AllocateApplicationIdResult(Failure(new Exception(s"Application name ${app.name} already existed.")))
       } else {
-        context.actorOf(launcher.props(appId, executorId, app, jar, username, context.parent, Some(client)), s"launcher${appId}_${Util.randInt}")
-
-        val appState = new ApplicationState(appId, app.name, 0, app, jar, username, null)
-        appMasterRestartPolicies += appId -> new RestartPolicy(appMasterMaxRetries, appMasterRetryTimeRange)
-        kvService ! PutKV(appId.toString, APP_STATE, appState)
+        tempAppSubmissionRegistry += appId ->(app, username)
+        client ! AllocateApplicationIdResult(Success(appId))
         appId += 1
       }
+    }
+    case SubmitApplication(id, jar) => {
+      LOG.info(s"Submit Application ($id)...")
+      val client = sender
+      val (app: AppDescription, username: String) = tempAppSubmissionRegistry.getOrElse(id, ()=>(null, null))
+      if (app == null) {
+        client ! SubmitApplicationResult(Failure(new Exception(s"Application id $id can't be found.")))
+      } else {
+        tempAppSubmissionRegistry -= id
+        context.actorOf(launcher.props(id, executorId, app, jar, username, context.parent, Some(client)), s"launcher${id}_${Util.randInt}")
 
-    case RestartApplication(appId) =>
+        val appState = new ApplicationState(id, app.name, 0, app, jar, username, null)
+        appMasterRestartPolicies += id -> new RestartPolicy(appMasterMaxRetries, appMasterRetryTimeRange)
+        kvService ! PutKV(id.toString, APP_STATE, appState)
+      }
+    }
+    case RestartApplication(appId) => {
       (kvService ? GetKV(appId.toString, APP_STATE)).asInstanceOf[Future[GetKVResult]].map {
         case GetKVSuccess(_, result) =>
           val appState = result.asInstanceOf[ApplicationState]
           if (appState != null) {
             LOG.info(s"Shutting down the application (restart), $appId")
             self ! ShutdownApplication(appId)
-            self forward SubmitApplication(appState.app, appState.jar, appState.username)
+            val appIdFuture = self ? AllocateApplicationId(appState.app, appState.username)
+            appIdFuture.onSuccess { case newId: Int =>
+              self forward SubmitApplication(newId, appState.jar)
+            }
           } else {
             sender ! SubmitApplicationResult(Failure(
               new Exception(s"Failed to restart, because the application $appId does not exist.")
@@ -125,7 +143,7 @@ private[cluster] class AppManager(kvService: ActorRef, launcher: AppMasterLaunch
             new Exception(s"Unable to obtain the Master State. Application $appId will not be restarted.")
           ))
       }
-
+    }
     case ShutdownApplication(appId) =>
       LOG.info(s"App Manager Shutting down application $appId")
       val (_, info) = appMasterRegistry.getOrElse(appId, (null, null))

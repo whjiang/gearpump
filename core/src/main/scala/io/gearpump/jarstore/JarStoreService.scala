@@ -17,11 +17,11 @@
  */
 package io.gearpump.jarstore
 
-import java.io.{InputStream, OutputStream, File}
+import java.io.{InputStream, OutputStream}
 import java.net.URI
 import java.util.ServiceLoader
 
-import akka.actor.{ActorSystem, ActorRefFactory}
+import akka.actor.ActorSystem
 import com.typesafe.config.Config
 import io.gearpump.util.{Constants, Util}
 
@@ -42,6 +42,9 @@ trait JarStoreService {
     * @param system Actor system
     * @param jarStoreRootPath  the absolute path for a jar store */
   def init(config: Config, system: ActorSystem, jarStoreRootPath: String)
+
+  /** Clean up the jars for an application */
+  def cleanup(appId: Int)
 
   /**
    * This function will create an OutputStream so that Master can use to upload the client side file to jar store.

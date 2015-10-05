@@ -17,46 +17,38 @@
  */
 package io.gearpump.util
 
-
-import java.io.File
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.Http.ServerBinding
-import akka.http.scaladsl.marshalling.{ToResponseMarshallable, Marshal}
-import akka.http.scaladsl.model.Uri.Path
-import akka.http.scaladsl.model.{HttpEntity, HttpRequest, MediaTypes, Multipart, _}
+import akka.http.scaladsl.model.{HttpEntity, MediaTypes, _}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server._
-import akka.http.scaladsl.server.directives.ParameterDirectives.ParamMagnet
-import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
-import akka.stream.io.{SynchronousFileSink, SynchronousFileSource}
-import akka.stream.scaladsl.{Sink, Source}
-import io.gearpump.jarstore.FilePath
+import io.gearpump.jarstore.{FilePath, JarStoreService}
+import io.gearpump.util.FileDirective._
 import io.gearpump.util.FileServer.Port
-import spray.json.{JsonFormat, RootJsonFormat}
-import scala.concurrent.{ExecutionContext, Future}
 import spray.json.DefaultJsonProtocol._
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import FileDirective._
+import spray.json.JsonFormat
 
-class FileServer(system: ActorSystem, host: String, port: Int = 0, rootDirectory: File) {
+import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
+
+class FileServer(system: ActorSystem, host: String, port: Int = 0, jarStore: JarStoreService) {
   import system.dispatcher
   implicit val actorSystem = system
   implicit val materializer = ActorMaterializer()
   implicit def ec: ExecutionContext = system.dispatcher
 
-  import FileServer.filePathFormat
-
   val route: Route = {
     path("upload") {
-      uploadFileTo(rootDirectory) { fileMap =>
-        complete(fileMap.head._2.file.getName)
+      uploadFileTo(jarStore) { fileMap =>
+        complete(fileMap.head._2.file)
       }
     } ~
       path("download") {
-        parameters("file") { file: String =>
-          downloadFile(new File(rootDirectory, file))
+        parameters("file", "appid") { (file: String, appid: String) =>
+          val appId: Option[Int] = Try(appid.toInt).toOption
+          downloadFile(jarStore, appId.get, file)
         }
       } ~
       pathEndOrSingleSlash {
@@ -95,56 +87,6 @@ object FileServer {
 
   implicit def filePathFormat: JsonFormat[FilePath] = jsonFormat1(FilePath.apply)
 
-  case class Port(port : Int)
-
-  class Client(system: ActorSystem, host: String, port: Int) {
-
-    def this(system: ActorSystem, url: String) = {
-      this(system, Uri(url).authority.host.address(), Uri(url).authority.port)
-    }
-
-    private implicit val actorSystem = system
-    private implicit val materializer = ActorMaterializer()
-    private implicit val ec = system.dispatcher
-
-    val server = Uri(s"http://$host:$port")
-    val httpClient = Http(system).outgoingConnection(server.authority.host.address(), server.authority.port)
-
-    def upload(file: File): Future[FilePath] = {
-      val target = server.withPath(Path("/upload"))
-
-      val request = entity(file).map{entity =>
-        HttpRequest(HttpMethods.POST, uri = target, entity = entity)
-      }
-
-      val response = Source(request).via(httpClient).runWith(Sink.head)
-      response.flatMap{some =>
-        Unmarshal(some).to[String]
-      }.map{path =>
-        FilePath(path)
-      }
-    }
-
-    def download(remoteFile: FilePath, saveAs: File): Future[Unit] = {
-      val downoad = server.withPath(Path("/download")).withQuery("file" -> remoteFile.path)
-      //download file to local
-      val response = Source.single(HttpRequest(uri = downoad)).via(httpClient).runWith(Sink.head)
-      val downloaded = response.flatMap { response =>
-        response.entity.dataBytes.runWith(SynchronousFileSink(saveAs))
-      }
-      downloaded.map(written => Unit)
-    }
-
-    private def entity(file: File)(implicit ec: ExecutionContext): Future[RequestEntity] = {
-      val entity =  HttpEntity(MediaTypes.`application/octet-stream`, file.length(), SynchronousFileSource(file, chunkSize = 100000))
-      val body = Source.single(
-        Multipart.FormData.BodyPart(
-          "uploadfile",
-          entity,
-          Map("filename" -> file.getName)))
-      val form = Multipart.FormData(body)
-
-      Marshal(form).to[RequestEntity]
-    }
-  }
+  case class Port(port: Int)
 }
+

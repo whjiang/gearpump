@@ -21,18 +21,21 @@ package io.gearpump.cluster.client
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem}
+import akka.pattern.ask
 import akka.util.Timeout
-import com.typesafe.config.{ConfigFactory, Config}
+import com.typesafe.config.{Config, ConfigFactory}
+import io.gearpump.cluster.ClientToMaster.{GetJarStoreServer, JarStoreServerAddress}
 import io.gearpump.cluster.MasterToAppMaster.AppMastersData
 import io.gearpump.cluster.MasterToClient.ReplayApplicationResult
 import io.gearpump.cluster._
 import io.gearpump.cluster.master.MasterProxy
-import io.gearpump.jarstore.{FilePath, JarStoreService}
 import io.gearpump.util.Constants._
-import io.gearpump.util.{Constants, LogUtil, Util}
+import io.gearpump.util.{Constants, FileServerClient, LogUtil, Util}
 import org.slf4j.Logger
 
 import scala.collection.JavaConversions._
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 //TODO: add interface to query master here
 class ClientContext(config: Config, sys: ActorSystem, _master: ActorRef) {
@@ -56,8 +59,12 @@ class ClientContext(config: Config, sys: ActorSystem, _master: ActorRef) {
   val shouldCleanupSystem = Option(sys).isEmpty
 
   private val master = Option(_master).getOrElse(system.actorOf(MasterProxy.props(masters), s"masterproxy${system.name}"))
-  private val jarStoreService = JarStoreService.get(config)
-  jarStoreService.init(config, system)
+
+  private implicit def dispatcher: ExecutionContext = system.dispatcher
+  private lazy val client = (master ? GetJarStoreServer).asInstanceOf[Future[JarStoreServerAddress]].map { address =>
+    val fsClient = new FileServerClient(system, address.url)
+    fsClient
+  }
 
   LOG.info(s"Creating master proxy ${master} for master list: $masters")
 
@@ -71,7 +78,7 @@ class ClientContext(config: Config, sys: ActorSystem, _master: ActorRef) {
   }
 
   def submit(app : Application, jar: String) : Int = {
-    import app.{name, appMaster, userConfig}
+    import app.{appMaster, name, userConfig}
     val submissionConfig = getSubmissionConfig(config)
     val appDescription = AppDescription(name, appMaster.getName, userConfig, submissionConfig)
     submit(appDescription, jar)
@@ -100,12 +107,13 @@ class ClientContext(config: Config, sys: ActorSystem, _master: ActorRef) {
     val client = new MasterClient(master)
     val appName = checkAndAddNamePrefix(app.name, System.getProperty(GEARPUMP_APP_NAME_PREFIX))
     val updatedApp = AppDescription(appName, app.appMaster, app.userConfig, app.clusterConfig)
-    if (jarPath == null) {
-      client.submitApplication(updatedApp, None)
-    } else {
-      val appJar = loadFile(jarPath)
-      client.submitApplication(updatedApp, Option(appJar))
-    }
+    val appId = client.allocateApplicationId(updatedApp)
+
+    //upload JAR
+    val appJar: Option[AppJar] = if(jarPath == null) None else Option(uploadFile(appId, jarPath))
+    //finish application submission
+    client.submitApplication(appId, appJar)
+    appId
   }
 
   def replayFromTimestampWindowTrailingEdge(appId : Int): ReplayApplicationResult = {
@@ -135,10 +143,12 @@ class ClientContext(config: Config, sys: ActorSystem, _master: ActorRef) {
     }
   }
 
-  private def loadFile(jarPath : String) : AppJar = {
+  private def uploadFile(appId: Int, jarPath : String) : AppJar = {
     val jarFile = new java.io.File(jarPath)
-    val path = jarStoreService.copyFromLocal(jarFile)
-    AppJar(jarFile.getName, path)
+
+    val future = client.flatMap(_.upload(appId, jarFile))
+    val renamed = Await.result(future, Duration(60, TimeUnit.SECONDS))
+    AppJar(jarFile.getName, renamed)
   }
 
   private def checkAndAddNamePrefix(appName: String, namePrefix: String) : String = {

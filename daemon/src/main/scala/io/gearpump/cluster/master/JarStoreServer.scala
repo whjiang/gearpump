@@ -16,28 +16,28 @@
  * limitations under the License.
  */
 
-package io.gearpump.jarstore.local
+package io.gearpump.cluster.master
 
-import java.io.File
-
-import akka.actor.{Actor, Props, Stash}
-import akka.pattern.{ask, pipe}
-import io.gearpump.cluster.ClientToMaster.GetJarStoreServer
+import akka.actor.{Actor, Stash}
+import akka.pattern.pipe
+import io.gearpump.cluster.ClientToMaster.{GetJarStoreServer, JarStoreServerAddress}
+import io.gearpump.jarstore.JarStoreService
 import io.gearpump.util._
-import io.gearpump.cluster.ClientToMaster.{JarStoreServerAddress, GetJarStoreServer}
 import org.slf4j.Logger
 
-import scala.concurrent.Future
-
-class LocalJarStore(rootDirPath : String) extends Actor with Stash {
+class JarStoreServer(rootDirPath : String) extends Actor with Stash {
   private val LOG: Logger = LogUtil.getLogger(getClass)
 
-  val host = context.system.settings.config.getString(Constants.GEARPUMP_HOSTNAME)
-  val rootDirectory = new File(rootDirPath)
+  val systemConfig = context.system.settings.config
 
-  FileUtils.forceMkdir(rootDirectory)
+  val host = systemConfig.getString(Constants.GEARPUMP_HOSTNAME)
 
-  val server = new FileServer(context.system, host, 0, rootDirectory)
+  //the jar store backend
+  val jarStore = JarStoreService.get(systemConfig)
+  jarStore.init(systemConfig, context.system, rootDirPath)
+
+  //jar store file server
+  val server = new FileServer(context.system, host, 0, jarStore)
 
   implicit val timeout = Constants.FUTURE_TIMEOUT
   implicit val executionContext = context.dispatcher

@@ -18,16 +18,15 @@
 
 package io.gearpump.util
 
-
-import java.io.File
-
 import akka.http.scaladsl.model.{HttpEntity, MediaTypes, Multipart}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server._
 import akka.stream.Materializer
-import akka.stream.io.{SynchronousFileSink, SynchronousFileSource}
+import akka.stream.io.{InputStreamSource, OutputStreamSink}
+import io.gearpump.jarstore.{JarStoreService, RemoteFileInfo}
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 
 object FileDirective {
@@ -37,21 +36,25 @@ object FileDirective {
 
   val CHUNK_SIZE = 262144
 
-  case class FileInfo(originFileName: String, file: File, length: Long)
+  case class FileInfo(originFileName: String, file: String, length: Long)
 
-  private def uploadFileImpl(rootDirectory: File)(implicit mat: Materializer, ec: ExecutionContext): Directive1[Future[Map[Name, FileInfo]]] = {
+  private def uploadFileImpl(jarStore: JarStoreService)(implicit mat: Materializer, ec: ExecutionContext): Directive1[Future[Map[Name, FileInfo]]] = {
     Directive[Tuple1[Future[Map[Name, FileInfo]]]] { inner =>
       entity(as[Multipart.FormData]) { (formdata: Multipart.FormData) =>
         val fileNameMap = formdata.parts.mapAsync(1) { p =>
-          if (p.filename.isDefined) {
-            val targetPath = File.createTempFile(s"userfile_${p.name}_${p.filename.getOrElse("")}", "", rootDirectory)
-            val written = p.entity.dataBytes.runWith(SynchronousFileSink(targetPath))
-            written.map(written =>
+          val appIdStr = p.additionalDispositionParams.get("appid")
+          val appId: Option[Int] = if(appIdStr.isEmpty) None else Try(appIdStr.get.toInt).toOption
+          if (p.filename.isDefined && appId.isDefined) {
+            val RemoteFileInfo(newName, os) = jarStore.createFileForWrite(appId.get, p.filename.get)
+            val written = p.entity.dataBytes.runWith(OutputStreamSink(()=>os))
+            written.map(written => {
+              os.close()
               if (written > 0) {
-                Map(p.name -> FileInfo(p.filename.get, targetPath, written))
+                Map(p.name -> FileInfo(p.filename.get, newName, written))
               } else {
                 Map.empty[Name, FileInfo]
-              })
+              }
+            })
           } else {
             Future(Map.empty[Name, FileInfo])
           }
@@ -61,15 +64,11 @@ object FileDirective {
     }
   }
 
-  def uploadFile: Directive1[Map[Name, FileInfo]] = {
-    uploadFileTo(null)
-  }
-
-  def uploadFileTo(rootDirectory: File): Directive1[Map[Name, FileInfo]] = {
+  def uploadFileTo(jarStore: JarStoreService): Directive1[Map[Name, FileInfo]] = {
     Directive[Tuple1[Map[Name, FileInfo]]] { inner =>
       extractMaterializer {implicit mat =>
         extractExecutionContext {implicit ec =>
-          uploadFileImpl(rootDirectory)(mat, ec) { filesFuture =>
+          uploadFileImpl(jarStore)(mat, ec) { filesFuture =>
             ctx => {
               filesFuture.map(map => inner(Tuple1(map))).flatMap(route => route(ctx))
             }
@@ -79,11 +78,16 @@ object FileDirective {
     }
   }
 
-  def downloadFile(file: File): Route = {
+  def downloadFile(jarStore: JarStoreService, appId: Int, file: String): Route = {
+    val is = jarStore.getInputStream(appId, file)
+    val source = InputStreamSource(()=>is, CHUNK_SIZE)
+
     val responseEntity = HttpEntity(
       MediaTypes.`application/octet-stream`,
       file.length,
-      SynchronousFileSource(file, CHUNK_SIZE))
+      source)
+
+    //TODO: close the input stream is.
     complete(responseEntity)
   }
 }

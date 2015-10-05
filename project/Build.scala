@@ -20,6 +20,7 @@ object Build extends sbt.Build {
   val copySharedSourceFiles = TaskKey[Unit]("copied shared services source code")
 
   val akkaVersion = "2.3.12"
+  val akkaHttpVersion = "1.0"
   val kryoVersion = "0.3.2"
   val clouderaVersion = "2.6.0-cdh5.4.2"
   val clouderaHBaseVersion = "1.0.0-cdh5.4.2"
@@ -134,10 +135,10 @@ object Build extends sbt.Build {
       "com.typesafe.akka" %% "akka-contrib" % akkaVersion
         exclude("com.typesafe.akka", "akka-persistence-experimental_2.11"),
       "com.typesafe.akka" %% "akka-cluster" % akkaVersion,
-      "com.typesafe.akka" %% "akka-http-experimental" % "1.0",
-      "com.typesafe.akka" %% "akka-http-core-experimental" % "1.0",
-      "com.typesafe.akka" %% "akka-stream-experimental" % "1.0",
-      "com.typesafe.akka" %% "akka-http-spray-json-experimental"% "1.0",
+      "com.typesafe.akka" %% "akka-http-experimental" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-http-core-experimental" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-stream-experimental" % akkaHttpVersion,
+      "com.typesafe.akka" %% "akka-http-spray-json-experimental"% akkaHttpVersion,
       "commons-httpclient" % "commons-httpclient" % commonsHttpVersion,
       "commons-logging" % "commons-logging" % commonsLoggingVersion,
       "com.github.patriknw" %% "akka-data-replication" % dataReplicationVersion,
@@ -163,6 +164,10 @@ object Build extends sbt.Build {
         "com.typesafe.akka" %% "akka-agent" % akkaVersion,
         "com.typesafe.akka" %% "akka-slf4j" % akkaVersion,
         "com.typesafe.akka" %% "akka-kernel" % akkaVersion,
+        "com.typesafe.akka" %% "akka-http-experimental" % akkaHttpVersion,
+        "com.typesafe.akka" %% "akka-http-core-experimental" % akkaHttpVersion,
+        "com.typesafe.akka" %% "akka-stream-experimental" % akkaHttpVersion,
+        "com.typesafe.akka" %% "akka-http-spray-json-experimental"% akkaHttpVersion,
         "com.github.intel-hadoop" %% "gearpump-shaded-akka-kryo" % kryoVersion,
         "com.typesafe.akka" %% "akka-testkit" % akkaVersion % "test",
         "org.scalatest" %% "scalatest" % scalaTestVersion % "test",
