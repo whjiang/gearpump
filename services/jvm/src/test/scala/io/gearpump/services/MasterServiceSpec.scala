@@ -45,7 +45,7 @@ import scala.concurrent.duration._
 import scala.util.{Success, Try}
 
 class MasterServiceSpec extends FlatSpec with ScalatestRouteTest with MasterService with
-  Matchers with BeforeAndAfterAll with JarStoreProvider{
+  Matchers with BeforeAndAfterAll with ClientContextProvider{
   import upickle.default.{read, write}
 
   def actorRefFactory = system
@@ -54,7 +54,7 @@ class MasterServiceSpec extends FlatSpec with ScalatestRouteTest with MasterServ
 
   lazy val jarStoreService = JarStoreService.get(system.settings.config)
 
-  override def getJarStoreService: JarStoreService = jarStoreService
+  override def getClientContext: JarStoreService = jarStoreService
 
   mockWorker.setAutoPilot {
     new AutoPilot {

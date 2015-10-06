@@ -21,12 +21,10 @@ package io.gearpump.services
 import akka.actor.{ActorRef, ActorSystem}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model.StatusCodes._
-import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.{Route, _}
 import akka.stream.ActorMaterializer
-import io.gearpump.jarstore.JarStoreService
-import io.gearpump.util.{Constants, LogUtil}
+import io.gearpump.util.{ClientFileUploader, Constants, LogUtil}
 import org.apache.commons.lang.exception.ExceptionUtils
 
 class RestServices(actorSystem: ActorSystem, val master: ActorRef) extends
@@ -34,7 +32,7 @@ class RestServices(actorSystem: ActorSystem, val master: ActorRef) extends
     MasterService with
     WorkerService with
     AppMasterService with
-    JarStoreProvider {
+    FileUploaderProvider {
   private val LOG = LogUtil.getLogger(getClass)
 
   implicit def system: ActorSystem = actorSystem
@@ -57,14 +55,12 @@ class RestServices(actorSystem: ActorSystem, val master: ActorRef) extends
     staticRoute
   }
 
-  private val jarStoreService = JarStoreService.get(system.settings.config)
-  jarStoreService.init(system.settings.config, system)
-
-  override def getJarStoreService: JarStoreService = jarStoreService
+  private val uploader = new ClientFileUploader(master)
+  override def getUploader: ClientFileUploader = uploader
 }
 
-trait JarStoreProvider {
-  def getJarStoreService: JarStoreService
+trait FileUploaderProvider {
+  def getUploader: ClientFileUploader
 }
 
 object RestServices {

@@ -49,7 +49,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 trait MasterService {
-  this: JarStoreProvider =>
+  this: FileUploaderProvider =>
 
   import upickle.default.{read, write}
 
@@ -128,7 +128,7 @@ trait MasterService {
                   } else {
                     val argsArray = args.split(" +")
                     onComplete(Future(
-                      MasterService.submitJar(jar.get, userConf, argsArray, system.settings.config))) {
+                      MasterService.submitJar(new File(jar.get), userConf.map(new File(_)), argsArray, system.settings.config))) {
                       case Success(_) =>
                         complete(write(
                           MasterService.Status(success = true)))
@@ -171,7 +171,7 @@ trait MasterService {
                 complete(write(
                   MasterService.Status(success = false, reason = "Jar file not found")))
               } else {
-                val jarFile = Util.uploadJar(jar.get, getJarStoreService)
+                val jarFile = Util.uploadJar(jar.get, getClientContext)
                 complete(write(jarFile))
               }
             }

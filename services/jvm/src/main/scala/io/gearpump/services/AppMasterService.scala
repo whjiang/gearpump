@@ -42,7 +42,7 @@ import scala.concurrent.{ExecutionContext}
 import FileDirective._
 
 trait AppMasterService  {
-  this: JarStoreProvider =>
+  this: FileUploaderProvider =>
 
   def master: ActorRef
   implicit def system: ActorSystem
@@ -62,7 +62,8 @@ trait AppMasterService  {
               if(jar.nonEmpty) {
                 dagOperation match {
                   case replace: ReplaceProcessor =>
-                    val description = replace.newProcessorDescription.copy(jar = Util.uploadJar(jar.get, getJarStoreService))
+                    val appJar = getUploader.uploadFile(appId, jar.get)
+                    val description = replace.newProcessorDescription.copy(jar = appJar)
                     dagOperation = replace.copy(newProcessorDescription = description)
                 }
               }

@@ -40,7 +40,7 @@ import scala.concurrent.duration._
 import scala.util.{Success, Try}
 
 class AppMasterServiceSpec extends FlatSpec with ScalatestRouteTest with AppMasterService
-  with Matchers with BeforeAndAfterAll with JarStoreProvider{
+  with Matchers with BeforeAndAfterAll with ClientContextProvider{
 
   private val LOG: Logger = LogUtil.getLogger(getClass)
   def actorRefFactory = system
@@ -50,7 +50,7 @@ class AppMasterServiceSpec extends FlatSpec with ScalatestRouteTest with AppMast
 
   lazy val jarStoreService = JarStoreService.get(system.settings.config)
 
-  override def getJarStoreService: JarStoreService = jarStoreService
+  override def getClientContext: JarStoreService = jarStoreService
 
   mockAppMaster.setAutoPilot {
     new AutoPilot {

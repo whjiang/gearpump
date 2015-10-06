@@ -24,9 +24,9 @@ import io.gearpump.cluster.AppMasterToMaster.AppDataSaved
 import io.gearpump.cluster.MasterToAppMaster.{AppMasterData, AppMastersData, AppMastersDataRequest, AppMasterRegistered}
 import io.gearpump.cluster.TestUtil
 import io.gearpump.cluster.AppMasterToMaster._
-import io.gearpump.cluster.ClientToMaster.{ResolveAppId, ShutdownApplication, SubmitApplication}
+import io.gearpump.cluster.ClientToMaster.{AllocateApplicationId, ResolveAppId, ShutdownApplication, SubmitApplication}
 import io.gearpump.cluster.MasterToAppMaster._
-import io.gearpump.cluster.MasterToClient.{SubmitApplicationResult, ShutdownApplicationResult, ReplayApplicationResult, ResolveAppIdResult}
+import io.gearpump.cluster.MasterToClient._
 import io.gearpump.cluster._
 import io.gearpump.cluster.master.AppManager._
 import io.gearpump.cluster.appmaster.{AppMasterRuntimeInfo, ApplicationState}
@@ -102,32 +102,36 @@ class AppManagerSpec extends FlatSpec with Matchers with BeforeAndAfterEach with
 
   "AppManager" should "reject the application submission if the app name already existed" in {
     val app = TestUtil.dummyApp
-    val submit = SubmitApplication(app, None, "username")
+    val allocateAppId = AllocateApplicationId(app, "username")
     val client = TestProbe()(getActorSystem)
     val appMaster = TestProbe()(getActorSystem)
     val worker = TestProbe()(getActorSystem)
     val appId = 1
 
-    client.send(appManager, submit)
+    client.send(appManager, allocateAppId)
+    assert(client.receiveN(1).head.asInstanceOf[AllocateApplicationIdResult].appId == Success(1))
+    client.send(appManager, SubmitApplication(appId, None))
 
     kvService.expectMsgType[PutKV]
     appLauncher.expectMsg(LauncherStarted(appId))
     appMaster.send(appManager, RegisterAppMaster(appMaster.ref, AppMasterRuntimeInfo(appId, app.name)))
     appMaster.expectMsgType[AppMasterRegistered]
 
-    client.send(appManager, submit)
-    assert(client.receiveN(1).head.asInstanceOf[SubmitApplicationResult].appId.isFailure)
+    client.send(appManager, allocateAppId)
+    assert(client.receiveN(1).head.asInstanceOf[AllocateApplicationIdResult].appId.isFailure)
   }
 
   def testClientSubmission(withRecover: Boolean) : Unit = {
     val app = TestUtil.dummyApp
-    val submit = SubmitApplication(app, None, "username")
+    val allocateAppId = AllocateApplicationId(app, "username")
     val client = TestProbe()(getActorSystem)
     val appMaster = TestProbe()(getActorSystem)
     val worker = TestProbe()(getActorSystem)
     val appId = 1
 
-    client.send(appManager, submit)
+    client.send(appManager, allocateAppId)
+    assert(client.receiveN(1).head.asInstanceOf[AllocateApplicationIdResult].appId == Success(1))
+    client.send(appManager, SubmitApplication(appId, None))
 
     kvService.expectMsgType[PutKV]
     appLauncher.expectMsg(LauncherStarted(appId))

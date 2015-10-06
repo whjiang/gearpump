@@ -21,21 +21,18 @@ package io.gearpump.cluster.client
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{ActorRef, ActorSystem}
-import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
-import io.gearpump.cluster.ClientToMaster.{GetJarStoreServer, JarStoreServerAddress}
 import io.gearpump.cluster.MasterToAppMaster.AppMastersData
 import io.gearpump.cluster.MasterToClient.ReplayApplicationResult
 import io.gearpump.cluster._
 import io.gearpump.cluster.master.MasterProxy
 import io.gearpump.util.Constants._
-import io.gearpump.util.{Constants, FileServerClient, LogUtil, Util}
+import io.gearpump.util.{ClientFileUploader, Constants, LogUtil, Util}
 import org.slf4j.Logger
 
 import scala.collection.JavaConversions._
-import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.ExecutionContext
 
 //TODO: add interface to query master here
 class ClientContext(config: Config, sys: ActorSystem, _master: ActorRef) {
@@ -61,10 +58,8 @@ class ClientContext(config: Config, sys: ActorSystem, _master: ActorRef) {
   private val master = Option(_master).getOrElse(system.actorOf(MasterProxy.props(masters), s"masterproxy${system.name}"))
 
   private implicit def dispatcher: ExecutionContext = system.dispatcher
-  private lazy val client = (master ? GetJarStoreServer).asInstanceOf[Future[JarStoreServerAddress]].map { address =>
-    val fsClient = new FileServerClient(system, address.url)
-    fsClient
-  }
+
+  private val jarUploader = new ClientFileUploader(master)
 
   LOG.info(s"Creating master proxy ${master} for master list: $masters")
 
@@ -144,11 +139,7 @@ class ClientContext(config: Config, sys: ActorSystem, _master: ActorRef) {
   }
 
   private def uploadFile(appId: Int, jarPath : String) : AppJar = {
-    val jarFile = new java.io.File(jarPath)
-
-    val future = client.flatMap(_.upload(appId, jarFile))
-    val renamed = Await.result(future, Duration(60, TimeUnit.SECONDS))
-    AppJar(jarFile.getName, renamed)
+    jarUploader.uploadFile(appId, jarPath)
   }
 
   private def checkAndAddNamePrefix(appName: String, namePrefix: String) : String = {

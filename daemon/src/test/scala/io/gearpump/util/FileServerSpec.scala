@@ -25,6 +25,7 @@ import akka.actor.ActorSystem
 import io.gearpump.cluster.TestUtil
 import io.gearpump.google.common.io.Files
 import io.gearpump.jarstore.FilePath
+import io.gearpump.jarstore.local.LocalJarStoreService
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 
 import scala.concurrent.Await
@@ -46,19 +47,19 @@ class FileServerSpec  extends WordSpecLike with Matchers with BeforeAndAfterAll 
     system = ActorSystem("FileServerSpec", config)
   }
 
-  private def save(client: Client, data: Array[Byte]): FilePath = {
+  private def save(client: FileServerClient, data: Array[Byte]): FilePath = {
     val file = File.createTempFile("fileserverspec", "test")
     FileUtils.writeByteArrayToFile(file, data)
-    val future = client.upload(file)
+    val future = client.upload(1, file)
     import scala.concurrent.duration._
     val path = Await.result(future, 10 seconds)
     file.delete()
     path
   }
 
-  private def get(client: Client, remote: FilePath): Array[Byte] = {
+  private def get(client: FileServerClient, remote: FilePath): Array[Byte] = {
     val file = File.createTempFile("fileserverspec", "test")
-    val future = client.download(remote, file)
+    val future = client.download(1, remote, file)
     import scala.concurrent.duration._
     val data = Await.result(future, 10 seconds)
 
@@ -72,13 +73,16 @@ class FileServerSpec  extends WordSpecLike with Matchers with BeforeAndAfterAll 
 
       val rootDir = Files.createTempDir()
 
-      val server = new FileServer(system, host, 0, rootDir)
+      val localJarStore = new LocalJarStoreService
+      localJarStore.init(null, system, rootDir.getAbsolutePath)
+
+      val server = new FileServer(system, host, 0, localJarStore)
       val port = Await.result((server.start), Duration(25, TimeUnit.SECONDS))
 
       println("start test web server on port " + port)
 
       val sizes = List(1, 100, 1000000, 50000000)
-      val client = new Client(system, host, port.port)
+      val client = new FileServerClient(system, host, port.port)
 
       sizes.foreach { size =>
         val bytes = randomBytes(size)
@@ -97,10 +101,13 @@ class FileServerSpec  extends WordSpecLike with Matchers with BeforeAndAfterAll 
 
       val rootDir = Files.createTempDir()
 
-      val server = new FileServer(system, host, 0, rootDir)
+      val localJarStore = new LocalJarStoreService
+      localJarStore.init(null, system, rootDir.getAbsolutePath)
+
+      val server = new FileServer(system, host, 0, localJarStore)
       val port = Await.result((server.start), Duration(25, TimeUnit.SECONDS))
 
-      val client = new Client(system, host, port.port)
+      val client = new FileServerClient(system, host, port.port)
       val fetchedBytes = get(client, FilePath("noexist"))
       assert(fetchedBytes.length == 0)
       rootDir.delete()

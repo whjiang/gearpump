@@ -18,8 +18,12 @@
 package io.gearpump.util
 
 import java.io.File
+import java.util.concurrent.TimeUnit
 
-import akka.actor.ActorSystem
+import _root_.io.gearpump.cluster.AppJar
+import _root_.io.gearpump.cluster.ClientToMaster.{GetJarStoreServer, JarStoreServerAddress}
+import akka.actor.{ActorRef, ActorSystem}
+import akka.pattern.ask
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.Marshal
 import akka.http.scaladsl.model._
@@ -28,9 +32,11 @@ import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.io.{SynchronousFileSource, SynchronousFileSink}
 import akka.stream.scaladsl.Source
 import akka.stream.scaladsl.Sink
+import akka.util.Timeout
 import io.gearpump.jarstore.FilePath
 
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 import akka.stream._
 
 
@@ -87,5 +93,22 @@ class FileServerClient (system: ActorSystem, host: String, port: Int) {
     val form = Multipart.FormData(body)
 
     Marshal(form).to[RequestEntity]
+  }
+}
+
+class ClientFileUploader(master: ActorRef)(implicit system: ActorSystem, ec: ExecutionContext) {
+  private implicit val timeout = Timeout(15, TimeUnit.SECONDS)
+
+  private lazy val client = (master ? GetJarStoreServer).asInstanceOf[Future[JarStoreServerAddress]].map { address =>
+    val fsClient = new FileServerClient(system, address.url)
+    fsClient
+  }
+
+  def uploadFile(appId: Int, jarPath : String) : AppJar = {
+    val jarFile = new java.io.File(jarPath)
+
+    val future = client.flatMap(_.upload(appId, jarFile))
+    val renamed = Await.result(future, Duration(300, TimeUnit.SECONDS))
+    AppJar(jarFile.getName, renamed)
   }
 }

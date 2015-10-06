@@ -324,7 +324,8 @@ private[cluster] class AppManager(kvService: ActorRef, launcher: AppMasterLaunch
   }
 
   private def applicationNameExist(appName: String): Boolean = {
-    appMasterRegistry.values.exists(_._2.appName == appName)
+    appMasterRegistry.values.exists(_._2.appName == appName) ||
+      tempAppSubmissionRegistry.values.exists(_._1.name == appName)
   }
 }
 

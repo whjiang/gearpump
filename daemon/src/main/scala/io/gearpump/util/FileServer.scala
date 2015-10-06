@@ -20,12 +20,15 @@ package io.gearpump.util
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.Http.ServerBinding
+import akka.http.scaladsl.model.Multipart.FormData.BodyPart
 import akka.http.scaladsl.model.{HttpEntity, MediaTypes, _}
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server._
-import akka.stream.ActorMaterializer
-import io.gearpump.jarstore.{FilePath, JarStoreService}
+import akka.stream.{Materializer, ActorMaterializer}
+import akka.stream.io.{InputStreamSource, OutputStreamSink}
+import io.gearpump.jarstore.{RemoteFileInfo, FilePath, JarStoreService}
 import io.gearpump.util.FileDirective._
+import io.gearpump.util.FileServer._
 import io.gearpump.util.FileServer.Port
 import spray.json.DefaultJsonProtocol._
 import spray.json.JsonFormat
@@ -39,9 +42,11 @@ class FileServer(system: ActorSystem, host: String, port: Int = 0, jarStore: Jar
   implicit val materializer = ActorMaterializer()
   implicit def ec: ExecutionContext = system.dispatcher
 
+  val fileUploader = new JarStoreUploaderHandler(jarStore)
+
   val route: Route = {
     path("upload") {
-      uploadFileTo(jarStore) { fileMap =>
+      uploadFileTo(fileUploader) { fileMap =>
         complete(fileMap.head._2.file)
       }
     } ~
@@ -88,5 +93,39 @@ object FileServer {
   implicit def filePathFormat: JsonFormat[FilePath] = jsonFormat1(FilePath.apply)
 
   case class Port(port: Int)
+
+  def downloadFile(jarStore: JarStoreService, appId: Int, file: String): Route = {
+    val is = jarStore.getInputStream(appId, file)
+    val source = InputStreamSource(()=>is, CHUNK_SIZE)
+
+    val responseEntity = HttpEntity(
+      MediaTypes.`application/octet-stream`,
+      file.length,
+      source)
+
+    //TODO: close the input stream is.
+    complete(responseEntity)
+  }
 }
 
+/** a proxy between Jar store and HTTP directive */
+class JarStoreUploaderHandler(jarStore: JarStoreService) extends FileUploadHandler {
+  override def uploadFile(p: BodyPart)(implicit mat: Materializer, ec: ExecutionContext): Future[Map[Name, FileInfo]] = {
+    val appIdStr = p.additionalDispositionParams.get("appid")
+    val appId: Option[Int] = if(appIdStr.isEmpty) None else Try(appIdStr.get.toInt).toOption
+    if (p.filename.isDefined && appId.isDefined) {
+      val RemoteFileInfo(newName, os) = jarStore.createFileForWrite(appId.get, p.filename.get)
+      val written = p.entity.dataBytes.runWith(OutputStreamSink(()=>os))
+      written.map(written => {
+        os.close()
+        if (written > 0) {
+          Map(p.name -> FileInfo(p.filename.get, newName, written))
+        } else {
+          Map.empty[Name, FileInfo]
+        }
+      })
+    } else {
+      Future(Map.empty[Name, FileInfo])
+    }
+  }
+}
