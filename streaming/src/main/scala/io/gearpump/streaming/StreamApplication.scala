@@ -30,49 +30,74 @@ import scala.language.implicitConversions
 import scala.reflect.ClassTag
 
 /**
- * Processor is the blueprint for tasks.
- *
- */
+  * Processor is the blueprint for tasks.
+  *
+  */
 trait Processor[+T <: Task] extends ReferenceEqual {
 
   /**
-   * How many tasks you want to use for this processor.
-   */
+    * How many tasks you want to use for this processor.
+    */
   def parallelism: Int
 
   /**
-   * The custom [[UserConfig]], it is used to initialize a task in runtime.
-   */
+    * The custom [[UserConfig]], it is used to initialize a task in runtime.
+    */
   def taskConf: UserConfig
 
   /**
-   * Some description text for this processor.
-   */
+    * Some description text for this processor.
+    */
   def description: String
 
   /**
-   * The task class, should be a subtype of Task.
-   *
-   * Each runtime instance of this class is a task.
-   */
+    * The task class, should be a subtype of Task.
+    *
+    * Each runtime instance of this class is a task.
+    */
   def taskClass: Class[_ <: Task]
+
+  /**
+    * The output ports of this processor
+    * @return the output ports of this processor
+    * */
+  def outputPorts: Array[String]
 }
 
 object Processor {
   def ProcessorToProcessorDescription(id: ProcessorId, processor: Processor[_ <: Task]): ProcessorDescription = {
     import processor._
-    ProcessorDescription(id, taskClass.getName, parallelism, description, taskConf)
+    ProcessorDescription(id, taskClass.getName, parallelism, outputPorts, description, taskConf)
   }
 
-  def apply[T<: Task](parallelism : Int, description: String = "", taskConf: UserConfig = UserConfig.empty)(implicit classtag: ClassTag[T]): DefaultProcessor[T] = {
+  def apply[T <: Task](parallelism: Int, description: String = "", taskConf: UserConfig = UserConfig.empty)
+                      (implicit classtag: ClassTag[T]): DefaultProcessor[T] = {
     new DefaultProcessor[T](parallelism, description, taskConf, classtag.runtimeClass.asInstanceOf[Class[T]])
   }
 
-  def apply[T<: Task](taskClazz: Class[T], parallelism : Int, description: String, taskConf: UserConfig): DefaultProcessor[T] = {
+  def apply[T <: Task](taskClazz: Class[T], parallelism: Int, description: String, taskConf: UserConfig): DefaultProcessor[T] = {
     new DefaultProcessor[T](parallelism, description, taskConf, taskClazz)
   }
 
-  case class DefaultProcessor[T<: Task](parallelism : Int, description: String, taskConf: UserConfig, taskClass: Class[T]) extends Processor[T] {
+  def sinkProcessor[T <: Task](parallelism: Int, description: String = "",
+                               taskConf: UserConfig = UserConfig.empty)(implicit classtag: ClassTag[T]): SinkProcessor[T] = {
+    new SinkProcessor[T](parallelism, description, taskConf, classtag.runtimeClass.asInstanceOf[Class[T]])
+  }
+
+  def sinkProcessor[T <: Task](taskClazz: Class[T], parallelism: Int, description: String, taskConf: UserConfig): SinkProcessor[T] = {
+    new SinkProcessor[T](parallelism, description, taskConf, taskClazz)
+  }
+
+  def sourceProcessor[T <: Task](parallelism: Int, description: String = "",
+                                 taskConf: UserConfig = UserConfig.empty)(implicit classtag: ClassTag[T]): SourceProcessor[T] = {
+    new SourceProcessor[T](parallelism, description, taskConf, classtag.runtimeClass.asInstanceOf[Class[T]])
+  }
+
+  def sourceProcessor[T <: Task](taskClazz: Class[T], parallelism: Int, description: String, taskConf: UserConfig): SourceProcessor[T] = {
+    new SourceProcessor[T](parallelism, description, taskConf, taskClazz)
+  }
+
+  abstract class ProcessorBase[T <: Task](parallelism: Int, description: String, taskConf: UserConfig, taskClass: Class[T]) extends Processor[T] {
 
     def withParallelism(parallel: Int): DefaultProcessor[T] = {
       new DefaultProcessor[T](parallel, description, taskConf, taskClass)
@@ -86,15 +111,44 @@ object Processor {
       new DefaultProcessor[T](parallelism, description, conf, taskClass)
     }
   }
+
+  case class DefaultProcessor[T <: Task](parallelism: Int, description: String, taskConf: UserConfig, taskClass: Class[T])
+    extends ProcessorBase[T](parallelism, description, taskConf, taskClass) {
+    /**
+      * The output ports of this processor
+      * @return the output ports of this processor
+      **/
+    override def outputPorts: Array[String] = {
+      io.gearpump.util.Constants.DEFAULT_OUTPUT_PORTS
+    }
+  }
+
+  case class SourceProcessor[T <: Task](parallelism: Int, description: String, taskConf: UserConfig, taskClass: Class[T])
+    extends ProcessorBase[T](parallelism, description, taskConf, taskClass) {
+    /**
+      * The output ports of this processor
+      * @return the output ports of this processor
+      **/
+    override def outputPorts: Array[String] = io.gearpump.util.Constants.DEFAULT_OUTPUT_PORTS
+  }
+
+  case class SinkProcessor[T <: Task](parallelism: Int, description: String, taskConf: UserConfig, taskClass: Class[T])
+    extends ProcessorBase[T](parallelism, description, taskConf, taskClass) {
+    /**
+      * The output ports of this processor
+      * @return the output ports of this processor
+      **/
+    override def outputPorts: Array[String] = Array.empty[String]
+  }
 }
 
 /**
- * Each processor has a LifeTime.
- *
- * When input message's timestamp is beyond current processor's lifetime,
- * then it will not be processed by this processor.
- *
- */
+  * Each processor has a LifeTime.
+  *
+  * When input message's timestamp is beyond current processor's lifetime,
+  * then it will not be processed by this processor.
+  *
+  */
 case class LifeTime(birth: TimeStamp, death: TimeStamp) {
   def contains(timestamp: TimeStamp): Boolean = {
     timestamp >= birth && timestamp < death
@@ -110,8 +164,8 @@ object LifeTime {
 }
 
 /**
- * Represent a streaming application
- */
+  * Represent a streaming application
+  */
 class StreamApplication(override val name : String,  val inputUserConfig: UserConfig, val dag: Graph[ProcessorDescription, PartitionerDescription])
   extends Application {
 
@@ -124,13 +178,14 @@ class StreamApplication(override val name : String,  val inputUserConfig: UserCo
 }
 
 case class ProcessorDescription(
-    id: ProcessorId,
-    taskClass: String,
-    parallelism : Int,
-    description: String = "",
-    taskConf: UserConfig = null,
-    life: LifeTime = LifeTime.Immortal,
-    jar: AppJar = null) extends ReferenceEqual
+                                 id: ProcessorId,
+                                 taskClass: String,
+                                 parallelism : Int,
+                                 outputPorts: Array[String], //outputPorts(0) will be the default port
+                                 description: String = "",
+                                 taskConf: UserConfig = null,
+                                 life: LifeTime = LifeTime.Immortal,
+                                 jar: AppJar = null) extends ReferenceEqual
 
 object StreamApplication {
 
@@ -149,7 +204,8 @@ object StreamApplication {
       val updatedProcessor = ProcessorToProcessorDescription(indices(processor), processor)
       updatedProcessor
     }.mapEdge { (node1, edge, node2) =>
-      PartitionerDescription(new PartitionerObject(Option(edge).getOrElse(StreamApplication.hashPartitioner)))
+      PartitionerDescription(io.gearpump.util.Constants.DEFAULT_OUTPUT_PORT_NAME,
+        new PartitionerObject(Option(edge).getOrElse(StreamApplication.hashPartitioner)))
     }
     new StreamApplication(name, userConfig, graph)
   }
