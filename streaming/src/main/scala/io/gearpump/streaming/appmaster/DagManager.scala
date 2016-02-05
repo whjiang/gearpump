@@ -19,6 +19,7 @@
 package io.gearpump.streaming.appmaster
 
 import akka.actor.{ActorRef, Actor, Stash}
+import io.gearpump.streaming.AppMasterToExecutor.TaskSubscribers
 import io.gearpump.streaming._
 import io.gearpump.streaming.task.Subscriber
 import io.gearpump.streaming.storage.AppDataStore
@@ -153,7 +154,7 @@ object DagManager {
   case class LatestDAG(dag: DAG)
 
   case class GetTaskLaunchData(dagVersion: Int, processorId: Int, context: AnyRef = null)
-  case class TaskLaunchData(processorDescription : ProcessorDescription, subscribers: List[Subscriber], context: AnyRef = null)
+  case class TaskLaunchData(processorDescription : ProcessorDescription, subscribers: TaskSubscribers, context: AnyRef = null)
 
   sealed trait DAGOperation
 

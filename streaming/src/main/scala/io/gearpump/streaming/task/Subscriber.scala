@@ -19,7 +19,9 @@
 package io.gearpump.streaming.task
 
 import io.gearpump.partitioner.PartitionerDescription
+import io.gearpump.streaming.AppMasterToExecutor.TaskSubscribers
 import io.gearpump.streaming.{LifeTime, DAG}
+import io.gearpump.util.Constants
 
 /**
  * Each processor can have multiple downstream subscribers.
@@ -44,14 +46,14 @@ object Subscriber {
    * @param dag     the DAG
    * @return   the subscribers of this processor
    */
-  def of(processorId: Int, dag: DAG): List[Subscriber] = {
+  def of(processorId: Int, dag: DAG): TaskSubscribers = {
     val edges = dag.graph.outgoingEdgesOf(processorId)
 
-    edges.foldLeft(List.empty[Subscriber]) { (list, nodeEdgeNode) =>
+    edges.groupBy(_._2.sourcePort).mapValues(_.map { nodeEdgeNode =>
       val (_, partitioner, downstreamProcessorId) = nodeEdgeNode
       val downstreamProcessor = dag.processors(downstreamProcessorId)
-      list :+ Subscriber(downstreamProcessorId, partitioner, downstreamProcessor.parallelism, downstreamProcessor.life)
-    }
+      Subscriber(downstreamProcessorId, partitioner, downstreamProcessor.parallelism, downstreamProcessor.life)
+    }).toArray
   }
 }
 

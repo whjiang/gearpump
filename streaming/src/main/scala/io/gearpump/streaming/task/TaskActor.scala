@@ -44,7 +44,7 @@ class TaskActor(
     userConf : UserConfig,
     val task: TaskWrapper,
     inputSerializerPool: SerializationFramework)
-  extends Actor with ExpressTransport  with TimeOutScheduler{
+  extends Actor  with TimeOutScheduler{
   var upstreamMinClock: TimeStamp = 0L
   private var _minClock: TimeStamp = 0L
 
@@ -58,17 +58,16 @@ class TaskActor(
   val LOG: Logger = LogUtil.getLogger(getClass, app = appId, executor = executorId, task = taskId)
 
   //metrics
-  private val metricName = s"app${appId}.processor${taskId.processorId}.task${taskId.index}"
+  val metricName = s"app${appId}.processor${taskId.processorId}.task${taskId.index}"
   private val receiveLatency = Metrics(context.system).histogram(s"$metricName:receiveLatency", sampleRate = 1)
   private val processTime = Metrics(context.system).histogram(s"$metricName:processTime")
-  private val sendThroughput = Metrics(context.system).meter(s"$metricName:sendThroughput")
   private val receiveThroughput = Metrics(context.system).meter(s"$metricName:receiveThroughput")
 
   private val maxPendingMessageCount = config.getInt(GEARPUMP_STREAMING_MAX_PENDING_MESSAGE_COUNT)
   private val ackOnceEveryMessageCount =  config.getInt(GEARPUMP_STREAMING_ACK_ONCE_EVERY_MESSAGE_COUNT)
 
   private val executor = context.parent
-  private var life = taskContextData.life
+  var life = taskContextData.life
 
   //latency probe
   import context.dispatcher
@@ -84,15 +83,15 @@ class TaskActor(
 
   private val queue = new util.LinkedList[AnyRef]()
 
-  private var subscriptions = List.empty[(Int, Subscription)]
-
   // securityChecker will be responsible of dropping messages from
   // unknown sources
   private val securityChecker  = new SecurityChecker(taskId, self)
   private[task] var sessionId = NONE_SESSION
 
-  //report to appMaster with my address
-  express.registerLocalActor(TaskId.toLong(taskId), self)
+  //output ports
+  val outputPorts : Array[OutputPort] = taskContextData.subscribers.map { portInfo =>
+                                              new OutputPort(this, portInfo._1, portInfo._2)}
+
 
   final def receive : Receive = null
 
@@ -109,22 +108,20 @@ class TaskActor(
   def onStop() : Unit = task.onStop()
 
   /**
-   * output to a downstream by specifying a arrayIndex
-   * @param arrayIndex, this is not same as ProcessorId
-   * @param msg
-   */
+    * output via default port (the first port) to downstream by specifying a arrayIndex
+    * @param arrayIndex, subscription index (not ProcessorId)
+    * @param msg
+    */
   def output(arrayIndex: Int, msg: Message) : Unit = {
-    var count = 0
-    count +=  this.subscriptions(arrayIndex)._2.sendMessage(msg)
-    sendThroughput.mark(count)
+    outputPorts(0).output(arrayIndex, msg)
   }
 
+  /**
+    * output via default port (the first port) to downstream
+    * @param msg
+    */
   def output(msg : Message) : Unit = {
-    var count = 0
-    this.subscriptions.foreach{ subscription =>
-      count += subscription._2.sendMessage(msg)
-    }
-    sendThroughput.mark(count)
+    outputPorts(0).output(msg)
   }
 
   final override def postStop() : Unit = {
@@ -132,14 +129,20 @@ class TaskActor(
   }
 
   final override def preStart() : Unit = {
-    val register = RegisterTask(taskId, executorId, local)
+    val register = RegisterTask(taskId, executorId)
     LOG.info(s"$register")
     executor ! register
     context.become(waitForTaskRegistered)
   }
 
+  def minClockAtCurrentTask: TimeStamp = {
+    outputPorts.foldLeft(Long.MaxValue){ (clock, outputPort) =>
+      Math.min(clock, outputPort.minClock)
+    }
+  }
+
   private def allowSendingMoreMessages(): Boolean = {
-    subscriptions.forall(_._2.allowSendingMoreMessages())
+    outputPorts.forall(_.allowSendingMoreMessages())
   }
 
   private def doHandleMessage(): Unit = {
@@ -152,8 +155,8 @@ class TaskActor(
       val msg = queue.poll()
       if (msg != null) {
         msg match {
-          case SendAck(ack, targetTask) =>
-            transport(ack, targetTask)
+          case ack@SendAck =>
+            outputPorts.foreach(_.sendAck(ack))
           case m : Message =>
             count += 1
             onNext(m)
@@ -174,13 +177,7 @@ class TaskActor(
 
   private def onStartClock: Unit = {
     LOG.info(s"received start, clock: $upstreamMinClock, sessionId: $sessionId")
-    subscriptions = subscribers.map { subscriber =>
-      (subscriber.processorId ,
-        new Subscription(appId, executorId, taskId, subscriber, sessionId, this,
-          maxPendingMessageCount, ackOnceEveryMessageCount))
-    }.sortBy(_._1)
-
-    subscriptions.foreach(_._2.start)
+    outputPorts.foreach(_.initialize(sessionId, maxPendingMessageCount, ackOnceEveryMessageCount))
 
     import scala.collection.JavaConverters._
     stashQueue.asScala.foreach{item =>
@@ -228,7 +225,7 @@ class TaskActor(
         doHandleMessage()
       }
     case ack: Ack =>
-      subscriptions.find(_._1 == ack.taskId.processorId).foreach(_._2.receiveAck(ack))
+      outputPorts.foreach(_.receiveAck(ack))
       doHandleMessage()
     case inputMessage: SerializedMessage =>
       val message = Message(serializerPool.get().deserialize(inputMessage.bytes), inputMessage.timeStamp)
@@ -266,19 +263,15 @@ class TaskActor(
 
     case ChangeTask(_, dagVersion, life, subscribers) =>
       this.life = life
-      subscribers.foreach { subscriber =>
-        val processorId = subscriber.processorId
-        val subscription = getSubscription(processorId)
-        subscription match {
-          case Some(subscription) =>
-            subscription.changeLife(subscriber.lifeTime cross this.life)
-          case None =>
-            val subscription = new Subscription(appId, executorId, taskId, subscriber, sessionId, this,
-              maxPendingMessageCount, ackOnceEveryMessageCount)
-            subscription.start
-            subscriptions :+= (subscriber.processorId, subscription)
-            // sort, keep the order
-            subscriptions = subscriptions.sortBy(_._1)
+      subscribers.groupBy(_._1).foreach{ kv =>
+        val port: String = kv._1
+        val subs: Array[Subscriber] = kv._2.flatMap(_._2)
+        val ports = outputPorts.filter(_.portName==port)
+        if(ports.isEmpty) {
+          LOG.warn(s"Invalid port name $port. Can't find from existing port list. Processor port name can't be changed at runtime.")
+        }else {
+          val outputPort = ports(0)
+          outputPort.changeSubscription(subs, maxPendingMessageCount, ackOnceEveryMessageCount)
         }
       }
       sender ! TaskChanged(taskId, dagVersion)
@@ -312,10 +305,6 @@ class TaskActor(
         //Todo: Indicate the error and avoid the LOG flood
         //LOG.error(s"Task $taskId drop message $msg")
     }
-  }
-
-  private def getSubscription(processorId: ProcessorId): Option[Subscription] = {
-    subscriptions.find(_._1 == processorId).map(_._2)
   }
 }
 

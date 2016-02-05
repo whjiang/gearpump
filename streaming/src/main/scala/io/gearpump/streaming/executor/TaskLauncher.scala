@@ -22,6 +22,7 @@ package io.gearpump.streaming.executor
 import akka.actor.{Actor, ActorRef, ActorRefFactory, Props}
 import io.gearpump.cluster.{ExecutorContext, UserConfig}
 import io.gearpump.serializer.SerializationFramework
+import io.gearpump.streaming.AppMasterToExecutor.TaskSubscribers
 import io.gearpump.streaming.ProcessorDescription
 import io.gearpump.streaming.executor.TaskLauncher.TaskArgument
 import io.gearpump.streaming.task._
@@ -67,7 +68,7 @@ class TaskLauncher(
 
 object TaskLauncher {
 
-  case class TaskArgument(dagVersion: Int, processorDescription: ProcessorDescription, subscribers: List[Subscriber])
+  case class TaskArgument(dagVersion: Int, processorDescription: ProcessorDescription, subscribers: TaskSubscribers)
 
   def apply(executorContext: ExecutorContext, userConf: UserConfig): TaskLauncher = {
     import executorContext.{appId, appMaster, appName, executorId}

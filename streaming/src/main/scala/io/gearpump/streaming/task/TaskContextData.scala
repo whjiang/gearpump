@@ -19,6 +19,7 @@
 package io.gearpump.streaming.task
 
 import akka.actor.ActorRef
+import io.gearpump.streaming.AppMasterToExecutor.TaskSubscribers
 import io.gearpump.streaming.LifeTime
 
 case class TaskContextData(
@@ -28,4 +29,4 @@ case class TaskContextData(
     appMaster : ActorRef,
     parallelism: Int,
     life: LifeTime,
-    subscribers: List[Subscriber])
+    subscribers: TaskSubscribers)

@@ -181,7 +181,7 @@ case class ProcessorDescription(
                                  id: ProcessorId,
                                  taskClass: String,
                                  parallelism : Int,
-                                 outputPorts: Array[String], //outputPorts(0) will be the default port
+                                 outputPorts: Array[String] = io.gearpump.util.Constants.DEFAULT_OUTPUT_PORTS, //outputPorts(0) will be the default port
                                  description: String = "",
                                  taskConf: UserConfig = null,
                                  life: LifeTime = LifeTime.Immortal,

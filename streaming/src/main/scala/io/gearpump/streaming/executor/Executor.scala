@@ -137,7 +137,7 @@ class Executor(executorContext: ExecutorContext, userConf : UserConfig, launcher
   def dynamicDagPhase1(dagVersion: Int, launched: List[TaskId], changed: List[ChangeTask], registered: List[TaskId]): Receive = {
     state = State.DYNAMIC_DAG_PHASE1
     box({
-      case launch@LaunchTasks(taskIds, version, processorDescription, subscribers: List[Subscriber]) => {
+      case launch@LaunchTasks(taskIds, version, processorDescription, subscribers) => {
         assertVersion(dagVersion, version, clue = launch)
 
         LOG.info(s"Launching Task $taskIds for app: $appId")
