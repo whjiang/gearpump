@@ -19,11 +19,11 @@
 package io.gearpump.streaming.dsl.plan
 
 import akka.actor.ActorSystem
-import io.gearpump.streaming.Processor
+import io.gearpump.streaming.{Edge, Processor}
 import io.gearpump.streaming.dsl.op._
 import io.gearpump.streaming.dsl.partitioner.GroupByPartitioner
 import io.gearpump.streaming.task.Task
-import io.gearpump.partitioner.{CoLocationPartitioner, HashPartitioner, Partitioner}
+import io.gearpump.partitioner.{UnicastPartitioner, CoLocationPartitioner, HashPartitioner, Partitioner}
 import io.gearpump.util.Graph
 
 class Planner {
@@ -31,21 +31,23 @@ class Planner {
   /*
    * Convert Dag[Op] to Dag[TaskDescription] so that we can run it easily.
    */
-  def plan(dag: Graph[Op, OpEdge])(implicit system: ActorSystem): Graph[Processor[_ <: Task], _ <: Partitioner] = {
+  def plan(dag: Graph[Op, OpEdge])(implicit system: ActorSystem): Graph[Processor[_ <: Task], Edge] = {
 
     val opTranslator = new OpTranslator()
 
     val newDag = optimize(dag)
     newDag.mapEdge {(node1, edge, node2) =>
       edge match {
-        case Shuffle =>
+        case Shuffle(outputPort) =>
+          Edge(outputPort,
           node2.head match {
             case groupBy: GroupByOp[Any, Any] =>
               new GroupByPartitioner(groupBy.fun)
             case _ => new HashPartitioner
-          }
-        case Direct =>
-          new CoLocationPartitioner
+          })
+        case Direct(outputPort) =>
+          val part: Partitioner = new CoLocationPartitioner
+          Edge(outputPort, part)
       }
     }.mapVertex {opChain =>
       opTranslator.translate(opChain)
@@ -71,7 +73,7 @@ class Planner {
       // for processor node, we don't allow it to merge with downstream operators
       !node1.head.isInstanceOf[ProcessorOp[_<:Task]]) {
       val (_, edge, _) = dag.outgoingEdgesOf(node1)(0)
-      if (edge == Direct) {
+      if (edge.isInstanceOf[Direct]) {
         val opList = OpChain(node1.ops ++ node2.ops)
         dag.addVertex(opList)
         for (incomingEdge <- dag.incomingEdgesOf(node1)) {

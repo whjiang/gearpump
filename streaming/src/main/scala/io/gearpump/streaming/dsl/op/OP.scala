@@ -77,7 +77,9 @@ case class OpChain(ops: List[Op]) extends Op {
   }
 }
 
-trait OpEdge
+trait OpEdge {
+  def outputPort: String
+}
 
 /**
  * The upstream OP and downstream OP doesn't require network data shuffle.
@@ -86,7 +88,7 @@ trait OpEdge
  * to represent the relation with upstream operators.
  *
  */
-case object Direct extends OpEdge
+case class Direct(outputPort: String) extends OpEdge
 
 /**
  * The upstream OP and downstream OP DOES require network data shuffle.
@@ -95,5 +97,5 @@ case object Direct extends OpEdge
  * to represent the relation with upstream operators.
  *
  */
-case object Shuffle extends OpEdge
+case class Shuffle(outputPort: String) extends OpEdge
 

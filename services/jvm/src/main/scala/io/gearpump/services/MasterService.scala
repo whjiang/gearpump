@@ -163,7 +163,7 @@ class MasterService(val master: ActorRef,
           val graph = dag.mapVertex { processorId =>
             processors(processorId)
           }.mapEdge { (node1, edge, node2) =>
-            PartitionerDescription(new PartitionerByClassName(edge))
+            PartitionerDescription(Constants.DEFAULT_OUTPUT_PORT_NAME, new PartitionerByClassName(edge))
           }
 
           val effectiveConfig = if (userconfig == null) UserConfig.empty else userconfig

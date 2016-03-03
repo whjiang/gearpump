@@ -10,14 +10,7 @@ import org.slf4j.Logger
 /**
   * Output port for a task
   */
-class OutputPort(task: TaskActor, val portName: String, subscribers: List[Subscriber]) extends ExpressTransport {
-  val appId = task.taskContextData.appId
-  val executorId = task.taskContextData.executorId
-  val taskId = task.taskId
-
-  val LOG: Logger = LogUtil.getLogger(getClass, app = appId,
-    executor = executorId, task = taskId)
-
+class OutputPort(task: TaskActor, val portName: String, subscribers: List[Subscriber]) extends ExpressTransport(task) {
   var subscriptions = List.empty[(Int, Subscription)]
 
   val sendThroughput = Metrics(task.context.system).meter(s"${task.metricName}.port$portName:sendThroughput")

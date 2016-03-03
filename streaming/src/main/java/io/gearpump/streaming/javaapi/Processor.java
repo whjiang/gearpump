@@ -26,11 +26,13 @@ import io.gearpump.streaming.sink.DataSinkTask;
 import io.gearpump.streaming.source.DataSource;
 import io.gearpump.streaming.source.DataSourceProcessor;
 import io.gearpump.streaming.source.DataSourceTask;
+import io.gearpump.util.Constants;
 
 public class Processor<T extends io.gearpump.streaming.task.Task> implements io.gearpump.streaming.Processor<T> {
   private Class<T> _taskClass;
   private int _parallelism = 1;
   private String _description = "";
+  private String[] _outputPorts = Constants.DEFAULT_OUTPUT_PORTS();
   private UserConfig _userConf = UserConfig.empty();
 
   public Processor(Class<T> taskClass) {
@@ -75,6 +77,7 @@ public class Processor<T extends io.gearpump.streaming.task.Task> implements io.
     this._parallelism = processor.parallelism();
     this._description = processor.description();
     this._userConf = processor.taskConf();
+    this._outputPorts = processor.outputPorts();
   }
 
   /**
@@ -119,6 +122,9 @@ public class Processor<T extends io.gearpump.streaming.task.Task> implements io.
   }
 
   @Override
+  public String[] outputPorts() { return _outputPorts; }
+
+  @Override
   public Class<? extends io.gearpump.streaming.task.Task> taskClass() {
     return _taskClass;
   }
@@ -130,4 +136,5 @@ public class Processor<T extends io.gearpump.streaming.task.Task> implements io.
   public boolean equals(Object obj) {
     return (this == obj);
   }
+
 }

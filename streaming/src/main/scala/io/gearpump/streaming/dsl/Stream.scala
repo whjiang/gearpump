@@ -27,6 +27,7 @@ import io.gearpump.util.{Graph, LogUtil}
 import org.slf4j.{Logger, LoggerFactory}
 
 class Stream[T](private val graph: Graph[Op,OpEdge], private val thisNode:Op, private val edge: Option[OpEdge] = None) {
+  import Stream._
 
   /**
    * convert a value[T] to a list of value[R]
@@ -38,7 +39,7 @@ class Stream[T](private val graph: Graph[Op,OpEdge], private val thisNode:Op, pr
   def flatMap[R](fun: T => TraversableOnce[R], description: String = null): Stream[R] = {
     val flatMapOp = FlatMapOp(fun, Option(description).getOrElse("flatmap"))
     graph.addVertex(flatMapOp )
-    graph.addEdge(thisNode, edge.getOrElse(Direct), flatMapOp)
+    graph.addEdge(thisNode, getDirectEdge(edge), flatMapOp)
     new Stream[R](graph, flatMapOp)
   }
 
@@ -74,7 +75,7 @@ class Stream[T](private val graph: Graph[Op,OpEdge], private val thisNode:Op, pr
   def reduce(fun: (T, T) => T, description: String = null): Stream[T] = {
     val reduceOp = ReduceOp(fun, Option(description).getOrElse("reduce"))
     graph.addVertex(reduceOp)
-    graph.addEdge(thisNode, edge.getOrElse(Direct), reduceOp)
+    graph.addEdge(thisNode, getDirectEdge(edge), reduceOp)
     new Stream(graph, reduceOp)
   }
 
@@ -93,8 +94,8 @@ class Stream[T](private val graph: Graph[Op,OpEdge], private val thisNode:Op, pr
   def merge(other: Stream[T], description: String = null): Stream[T] = {
     val mergeOp = MergeOp(Option(description).getOrElse("merge"))
     graph.addVertex(mergeOp)
-    graph.addEdge(thisNode, edge.getOrElse(Direct), mergeOp)
-    graph.addEdge(other.thisNode, other.edge.getOrElse(Shuffle), mergeOp)
+    graph.addEdge(thisNode, getDirectEdge(edge), mergeOp)
+    graph.addEdge(other.thisNode, getShuffleEdge(other.edge), mergeOp)
     new Stream[T](graph, mergeOp)
   }
 
@@ -119,7 +120,7 @@ class Stream[T](private val graph: Graph[Op,OpEdge], private val thisNode:Op, pr
   def groupBy[Group](fun: T => Group, parallelism: Int = 1, description: String = null): Stream[T] = {
     val groupOp = GroupByOp(fun, parallelism, Option(description).getOrElse("groupBy"))
     graph.addVertex(groupOp)
-    graph.addEdge(thisNode, edge.getOrElse(Shuffle), groupOp)
+    graph.addEdge(thisNode, getShuffleEdge(edge), groupOp)
     new Stream[T](graph, groupOp)
   }
 
@@ -133,8 +134,8 @@ class Stream[T](private val graph: Graph[Op,OpEdge], private val thisNode:Op, pr
   def process[R](processor: Class[_ <: Task], parallism: Int, conf: UserConfig = UserConfig.empty, description: String = null): Stream[R] = {
     val processorOp = ProcessorOp(processor, parallism, conf, Option(description).getOrElse("process"))
     graph.addVertex(processorOp)
-    graph.addEdge(thisNode, edge.getOrElse(Shuffle), processorOp)
-    new Stream[R](graph, processorOp, Some(Shuffle))
+    graph.addEdge(thisNode, getShuffleEdge(edge), processorOp)
+    new Stream[R](graph, processorOp, Some(createShuffleEdge))
   }
 }
 
@@ -166,6 +167,11 @@ class KVStream[K, V](stream: Stream[Tuple2[K, V]]){
 }
 
 object Stream {
+  def getDirectEdge(e : Option[OpEdge]): OpEdge = {e.getOrElse(Direct(io.gearpump.util.Constants.DEFAULT_OUTPUT_PORT_NAME))}
+
+  def getShuffleEdge(e: Option[OpEdge]): OpEdge = {e.getOrElse(Shuffle(io.gearpump.util.Constants.DEFAULT_OUTPUT_PORT_NAME))}
+
+  def createShuffleEdge: OpEdge = Shuffle(io.gearpump.util.Constants.DEFAULT_OUTPUT_PORT_NAME)
 
   def apply[T](graph: Graph[Op, OpEdge], node: Op, edge: Option[OpEdge]) = new Stream[T](graph, node, edge)
 
@@ -180,14 +186,14 @@ object Stream {
     def sink[T](dataSink: DataSink, parallism: Int, conf: UserConfig, description: String): Stream[T] = {
       implicit val sink = DataSinkOp[T](dataSink, parallism, conf, Some(description).getOrElse("traversable"))
       stream.graph.addVertex(sink)
-      stream.graph.addEdge(stream.thisNode, Shuffle, sink)
+      stream.graph.addEdge(stream.thisNode, createShuffleEdge, sink)
       new Stream[T](stream.graph, sink)
     }
 
     def sink[T](sink: Class[_ <: Task], parallism: Int, conf: UserConfig = UserConfig.empty, description: String = null): Stream[T] = {
       val sinkOp = ProcessorOp(sink, parallism, conf, Option(description).getOrElse("source"))
       stream.graph.addVertex(sinkOp)
-      stream.graph.addEdge(stream.thisNode, Shuffle, sinkOp)
+      stream.graph.addEdge(stream.thisNode, createShuffleEdge, sinkOp)
       new Stream[T](stream.graph, sinkOp)
     }
   }

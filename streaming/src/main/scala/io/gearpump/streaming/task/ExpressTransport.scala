@@ -23,6 +23,8 @@ import io.gearpump.serializer.SerializationFramework
 import io.gearpump.transport.netty.TaskMessage
 import io.gearpump.transport.{Express, HostPort}
 import io.gearpump.Message
+import io.gearpump.util.LogUtil
+import org.slf4j.Logger
 
 import scala.collection.mutable
 import io.gearpump.util.AkkaHelper
@@ -33,8 +35,14 @@ import io.gearpump.util.AkkaHelper
  * See [[Express]] for more information.
  *
  */
-trait ExpressTransport {
-  this: TaskActor =>
+class ExpressTransport(actor: TaskActor) {
+  val context = actor.context
+  val appId = actor.taskContextData.appId
+  val taskId = actor.taskId
+  val executorId = actor.taskContextData.executorId
+  val sessionId = actor.sessionId
+  val serializerPool = actor.serializerPool
+  val LOG: Logger = LogUtil.getLogger(getClass, app = appId, executor = executorId, task = taskId)
 
   final val express = Express(context.system)
   implicit val system = context.system.asInstanceOf[ExtendedActorSystem]

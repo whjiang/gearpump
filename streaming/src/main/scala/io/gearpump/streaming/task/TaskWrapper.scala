@@ -68,7 +68,7 @@ class TaskWrapper(val taskId: TaskId, taskClass: Class[_ <: Task], context: Task
    * @param tasks  the tasks to output to
    */
   def outputUnManaged(msg: AnyRef, tasks: TaskId *): Unit = {
-    actor.transport(msg, tasks: _*)
+    actor.outputPorts.lift(0).map(_.transport(msg, tasks: _*))
   }
 
   override def self: ActorRef = actor.context.self

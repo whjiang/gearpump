@@ -29,6 +29,7 @@ import io.gearpump.serializer.SerializationFramework
 import io.gearpump.streaming.AppMasterToExecutor._
 import io.gearpump.streaming.ExecutorToAppMaster._
 import io.gearpump.streaming.{Constants, ProcessorId}
+import io.gearpump.transport.HostPort
 import io.gearpump.util.{LogUtil, TimeOutScheduler}
 import io.gearpump.{Message, TimeStamp}
 import org.slf4j.Logger
@@ -92,6 +93,14 @@ class TaskActor(
   val outputPorts : Array[OutputPort] = taskContextData.subscribers.map { portInfo =>
                                               new OutputPort(this, portInfo._1, portInfo._2)}
 
+  def hostPort: HostPort = {
+    if (outputPorts.nonEmpty)
+      outputPorts(0).local
+    else {
+      val express = new ExpressTransport(this)
+      express.local
+    }
+  }
 
   final def receive : Receive = null
 
@@ -129,7 +138,7 @@ class TaskActor(
   }
 
   final override def preStart() : Unit = {
-    val register = RegisterTask(taskId, executorId)
+    val register = RegisterTask(taskId, executorId, hostPort)
     LOG.info(s"$register")
     executor ! register
     context.become(waitForTaskRegistered)
@@ -155,7 +164,7 @@ class TaskActor(
       val msg = queue.poll()
       if (msg != null) {
         msg match {
-          case ack@SendAck =>
+          case ack: SendAck =>
             outputPorts.foreach(_.sendAck(ack))
           case m : Message =>
             count += 1

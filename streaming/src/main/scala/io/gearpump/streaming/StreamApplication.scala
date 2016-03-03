@@ -24,7 +24,8 @@ import io.gearpump.streaming.task.Task
 import io.gearpump.TimeStamp
 import io.gearpump.cluster._
 import io.gearpump.partitioner.{HashPartitioner, Partitioner, PartitionerDescription, PartitionerObject}
-import io.gearpump.util.{LogUtil, Graph, ReferenceEqual}
+import io.gearpump.util.Graph.Path
+import io.gearpump.util.{Graph, LogUtil, ReferenceEqual}
 
 import scala.language.implicitConversions
 import scala.reflect.ClassTag
@@ -187,12 +188,14 @@ case class ProcessorDescription(
                                  life: LifeTime = LifeTime.Immortal,
                                  jar: AppJar = null) extends ReferenceEqual
 
+case class Edge(outputPort: String, partitioner: Partitioner)
+
 object StreamApplication {
 
   private val hashPartitioner = new HashPartitioner()
   private val LOG = LogUtil.getLogger(getClass)
 
-  def apply[T <: Processor[Task], P <: Partitioner] (name : String, dag: Graph[T, P], userConfig: UserConfig): StreamApplication = {
+  def apply[T <: Processor[Task]] (name : String, dag: Graph[T, Edge], userConfig: UserConfig): StreamApplication = {
     import Processor._
 
     if (dag.hasCycle()) {
@@ -204,11 +207,53 @@ object StreamApplication {
       val updatedProcessor = ProcessorToProcessorDescription(indices(processor), processor)
       updatedProcessor
     }.mapEdge { (node1, edge, node2) =>
-      PartitionerDescription(io.gearpump.util.Constants.DEFAULT_OUTPUT_PORT_NAME,
-        new PartitionerObject(Option(edge).getOrElse(StreamApplication.hashPartitioner)))
+      val e = Option(edge).getOrElse(Edge(io.gearpump.util.Constants.DEFAULT_OUTPUT_PORT_NAME, StreamApplication.hashPartitioner))
+      PartitionerDescription(e.outputPort, new PartitionerObject(e.partitioner))
     }
     new StreamApplication(name, userConfig, graph)
   }
 
   val DAG = "DAG"
+
+  implicit class DefaultPortEdge(p : Partitioner) extends Edge(io.gearpump.util.Constants.DEFAULT_OUTPUT_PORT_NAME, p)
+
+
+  implicit def anyToPath[N, E](any: N): Path[N, Edge] = Node(any)
+
+  implicit class Node[N](self: N) extends Path[N, Edge](List(Left(self))) {
+    def ~(partitioner: Partitioner): Path[N, Edge] = {
+      new Path(List(Left(self), Right(DefaultPortEdge(partitioner))))
+    }
+
+    def ~(edge: Edge): Path[N, Edge] = {
+      new Path(List(Left(self), Right(edge)))
+    }
+
+    def ~>[Node >: N](node: Node): Path[Node, Edge] = {
+      new NodeList(List(self, node))
+    }
+
+    def to[NODE >: N](node: NODE, edge: Edge): Path[Node[N], Edge] = {
+      this ~ edge ~> node
+    }
+  }
+
+  class NodeList[N](nodes: List[N]) extends Path[N, Edge](nodes.map(Left(_))) {
+    def ~(edge: Edge): Path[N, Edge] = {
+      new Path(nodes.map(Left(_)) :+ Right(edge))
+    }
+
+    def ~(partitioner: Partitioner): Path[N, Edge] = {
+      new Path(nodes.map(Left(_)) :+ Right(DefaultPortEdge(partitioner)))
+    }
+
+    def ~>[Node >: N](node: Node): Path[Node, Edge] = {
+      new NodeList(nodes :+ node)
+    }
+
+    def to[Node >: N](node: Node, edge: Edge): Path[Node, Edge] = {
+      this ~ edge ~> node
+    }
+  }
 }
+

@@ -69,7 +69,7 @@ object AppMasterToExecutor {
 object ExecutorToAppMaster {
   case class RegisterExecutor(executor: ActorRef, executorId: Int, resource: Resource, worker : WorkerInfo)
 
-  case class RegisterTask(taskId: TaskId, executorId : Int)
+  case class RegisterTask(taskId: TaskId, executorId : Int, host: HostPort)
   case class UnRegisterTask(taskId: TaskId, executorId : Int)
 
   case class MessageLoss(executorId: Int, taskId: TaskId, cause: String)
